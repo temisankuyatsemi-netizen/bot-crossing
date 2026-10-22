@@ -4,28 +4,28 @@
 <style>
   :root{color-scheme:dark}
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{width:100%;height:100%;background:#050302;overflow:hidden}
+  html,body{width:100%;height:100%;background:#030201;overflow:hidden}
   #c{position:fixed;inset:0;width:100%;height:100%}
   #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
   #topbar{position:absolute;top:max(14px,env(safe-area-inset-top,0px));
     left:max(14px,env(safe-area-inset-left,0px));right:max(14px,env(safe-area-inset-right,0px));
     display:flex;align-items:center;justify-content:space-between;gap:8px}
   #logo{font-family:'Orbitron',monospace;font-size:clamp(11px,1.8vw,16px);font-weight:900;
-    letter-spacing:.18em;color:#c8a060;text-shadow:0 0 12px #c8a06088}
-  #clock{font-family:'Orbitron',monospace;font-size:clamp(9px,1.3vw,12px);color:#7aaa60;
-    letter-spacing:.1em;background:rgba(0,0,0,.7);padding:3px 9px;
-    border:1px solid rgba(100,160,60,.3);border-radius:3px}
+    letter-spacing:.18em;color:#b89050;text-shadow:0 0 16px #b8905066,0 0 40px #b8905022}
+  #clock{font-family:'Orbitron',monospace;font-size:clamp(9px,1.3vw,12px);color:#608850;
+    letter-spacing:.1em;background:rgba(0,0,0,.75);padding:3px 10px;
+    border:1px solid rgba(80,120,40,.35);border-radius:3px}
   #feed{position:absolute;bottom:max(14px,env(safe-area-inset-bottom,0px));
     left:max(14px,env(safe-area-inset-left,0px));right:max(14px,env(safe-area-inset-right,0px));
     display:flex;flex-direction:column;gap:4px;max-height:90px;overflow:hidden}
-  .log{font-family:'VT323',monospace;font-size:15px;color:#506050;padding:3px 10px;
-    background:rgba(2,5,2,.88);border-left:2px solid #2a4a1a;border-radius:0 3px 3px 0;
-    animation:sl .3s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .log .who{font-weight:600;margin-right:6px}
-  @keyframes sl{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-  #room-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-    font-family:'VT323',monospace;font-size:clamp(16px,3vw,26px);letter-spacing:.15em;
-    color:rgba(200,170,100,.0);text-align:center;pointer-events:none;transition:color .5s}
+  .log{font-family:'VT323',monospace;font-size:15px;color:#485848;padding:4px 12px;
+    background:rgba(2,4,2,.92);border-left:2px solid #304820;border-radius:0 3px 3px 0;
+    animation:sl .35s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .log .who{font-weight:600;margin-right:7px}
+  @keyframes sl{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  #cam-label{position:absolute;bottom:max(120px,120px);left:50%;transform:translateX(-50%);
+    font-family:'Orbitron',monospace;font-size:clamp(9px,1.2vw,11px);font-weight:700;
+    letter-spacing:.22em;color:rgba(180,150,80,.55);text-align:center;pointer-events:none}
 </style>
 
 <canvas id="c"></canvas>
@@ -35,475 +35,831 @@
     <div id="clock">00:00:00</div>
   </div>
   <div id="feed"></div>
-  <div id="room-label"></div>
+  <div id="cam-label"></div>
 </div>
 
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 let W, H;
-function resize(){ W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+function resize(){ W=canvas.width=window.innerWidth; H=canvas.height=window.innerHeight; }
 resize(); window.addEventListener('resize', resize);
 
-// Clock
+// ── Clock ─────────────────────────────────────────────────────────
 function tickClock(){
-  const d = new Date();
-  document.getElementById('clock').textContent =
+  const d=new Date();
+  document.getElementById('clock').textContent=
     String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');
 }
-tickClock(); setInterval(tickClock, 1000);
+tickClock(); setInterval(tickClock,1000);
 
 // ── Camera ────────────────────────────────────────────────────────
-const cam = { x:0, y:0, zoom:1, tx:0, ty:0, tz:1 };
+const cam={x:0,y:0,zoom:.6,tx:0,ty:0,tz:.6};
+function ws(wx,wy){return{sx:(wx-cam.x)*cam.zoom+W/2, sy:(wy-cam.y)*cam.zoom+H/2};}
+function scl(v){return v*cam.zoom;}
 
-// ── World coords → screen ─────────────────────────────────────────
-function ws(wx, wy){ return { sx:(wx - cam.x)*cam.zoom + W/2, sy:(wy - cam.y)*cam.zoom + H/2 }; }
-function scl(v){ return v * cam.zoom; }
+// ── Color utils ───────────────────────────────────────────────────
+function hexRgb(h){const n=parseInt(h.replace('#',''),16);return`${(n>>16)&255},${(n>>8)&255},${n&255}`;}
+function shade(hex,p){
+  const n=parseInt(hex.replace('#',''),16);
+  const r=Math.max(0,Math.min(255,((n>>16)&255)+p));
+  const g=Math.max(0,Math.min(255,((n>>8)&255)+p));
+  const b=Math.max(0,Math.min(255,(n&255)+p));
+  return`#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+function rgba(hex,a){return`rgba(${hexRgb(hex)},${a})`;}
 
 // ── Rooms ─────────────────────────────────────────────────────────
-const ROOMS = [
-  { key:'hub',      label:'THE LAIR',           cx:0,    cy:0,    r:260, color:'#8a7040', glow:'rgba(180,140,60,0.15)',  dark:'#1a1208' },
-  { key:'leo',      label:"LEO'S DOJO",          cx:-520, cy:-300, r:200, color:'#1e90ff', glow:'rgba(30,144,255,0.2)', dark:'#060c18',
-    bandana:'#1e90ff', name:'LEONARDO',   sector:'content',
-    tasks:['Post AM workout reel','Morning training','Film technique','Athlete routine','Discipline post'] },
-  { key:'don',      label:"DON'S LAB",           cx:520,  cy:-300, r:200, color:'#9c27b0', glow:'rgba(156,39,176,0.2)', dark:'#0e0614',
-    bandana:'#9c27b0', name:'DONATELLO',  sector:'stocked',
-    tasks:['Prototype v2','User research','App wireframe','Backend schema','Pitch deck'] },
-  { key:'raph',     label:"RAPH'S GYM",          cx:-520, cy:300,  r:200, color:'#f44336', glow:'rgba(244,67,54,0.2)',  dark:'#180606',
-    bandana:'#f44336', name:'RAPHAEL',    sector:'athletic',
-    tasks:['Design drop concept','Launch campaign','Sample request','Brand guide','Collab pitch'] },
-  { key:'mikey',    label:"MIKEY'S STUDIO",      cx:520,  cy:300,  r:200, color:'#ff9800', glow:'rgba(255,152,0,0.2)',  dark:'#180a00',
-    bandana:'#ff9800', name:'MICHELANGELO',sector:'creative',
-    tasks:['Gallery concept','Merch design','COWABUNGA post','Cheat day haul','Cook-along video'] },
-  { key:'splinter', label:"SPLINTER'S WAR ROOM", cx:0,    cy:480,  r:180, color:'#4caf50', glow:'rgba(76,175,80,0.2)', dark:'#040e04',
-    bandana:'#4caf50', name:'SPLINTER',   sector:'hq',
-    tasks:['Sprint planning','OKR review','Roadmap update','Team stand-up','Weekly recap'] },
+const ROOMS=[
+  {key:'hub',      label:'THE SEWER LAIR', cx:0,    cy:0,    r:270, wallColor:'#2a1e0e', floorColor:'#120e08', accentColor:'#c8a050', isTurtle:false},
+  {key:'leo',      label:"LEO'S DOJO",     cx:-530, cy:-310, r:210, wallColor:'#0e1428', floorColor:'#080c18', accentColor:'#2266cc',
+   bandana:'#2266cc', name:'LEONARDO', tasks:['Post AM workout reel','Morning training film','Technique breakdown','Athlete routine','Discipline post','Kata session reel']},
+  {key:'don',      label:"DON'S LAB",      cx:530,  cy:-310, r:210, wallColor:'#180820', floorColor:'#0c0614', accentColor:'#8822bb',
+   bandana:'#8822bb', name:'DONATELLO', tasks:['Prototype v2 spec','User research loop','App wireframe','Backend schema','Supplier outreach','Pitch deck slide']},
+  {key:'raph',     label:"RAPH'S GYM",     cx:-530, cy:310,  r:210, wallColor:'#220808', floorColor:'#160404', accentColor:'#cc2222',
+   bandana:'#cc2222', name:'RAPHAEL', tasks:['Design drop concept','Launch campaign','Sample request','Brand guide','Collab pitch','Drop teaser reel']},
+  {key:'mikey',    label:"MIKEY'S STUDIO", cx:530,  cy:310,  r:210, wallColor:'#201008', floorColor:'#120a04', accentColor:'#dd7700',
+   bandana:'#dd7700', name:'MICHELANGELO', tasks:['Gallery concept','Merch design','Cheat day haul','Cook-along video','COWABUNGA post','Art timelapse']},
+  {key:'splinter', label:"SPLINTER'S WAR ROOM", cx:0, cy:490, r:190, wallColor:'#0c1208', floorColor:'#060a04', accentColor:'#449933',
+   bandana:'#449933', name:'SPLINTER', isSplinter:true, tasks:['Sprint planning','OKR review','Roadmap update','Team stand-up','Weekly recap','Assess the mission']},
 ];
 
-// ── Tunnels connecting hub to rooms ───────────────────────────────
-const TUNNELS = [
-  { from:'hub', to:'leo',      w:80 },
-  { from:'hub', to:'don',      w:80 },
-  { from:'hub', to:'raph',     w:80 },
-  { from:'hub', to:'mikey',    w:80 },
-  { from:'hub', to:'splinter', w:80 },
+const TUNNELS=[
+  {from:'hub',to:'leo',w:90},{from:'hub',to:'don',w:90},
+  {from:'hub',to:'raph',w:90},{from:'hub',to:'mikey',w:90},
+  {from:'hub',to:'splinter',w:90},
 ];
 
-// ── Particles (steam, drips, sparks) ─────────────────────────────
-const particles = [];
-function spawnSteam(x, y, color){
-  for(let i=0;i<4;i++) particles.push({
-    x, y, vx:(Math.random()-.5)*.4, vy:-.5-Math.random()*.5,
-    life:1, decay:.008+Math.random()*.006, r:3+Math.random()*5,
-    color, type:'steam'
-  });
+// ── Particles ─────────────────────────────────────────────────────
+const parts=[];
+function steam(x,y,col,n=3){
+  for(let i=0;i<n;i++) parts.push({x,y,vx:(Math.random()-.5)*.35,vy:-.55-Math.random()*.4,
+    life:1,decay:.006+Math.random()*.005,r:2+Math.random()*4,col,type:'steam'});
 }
-function spawnDrip(x, y){
-  particles.push({ x, y, vx:0, vy:.3+Math.random()*.3, life:1, decay:.015, r:2, color:'#2a4a6a', type:'drip' });
+function drip(x,y){
+  parts.push({x,y,vx:0,vy:.35+Math.random()*.2,life:1,decay:.014,r:1.8,col:'#1a3a5a',type:'drip'});
 }
-function spawnSpark(x, y, color){
-  for(let i=0;i<6;i++){
-    const a=Math.random()*Math.PI*2;
-    particles.push({ x, y, vx:Math.cos(a)*(1+Math.random()*3), vy:Math.sin(a)*(1+Math.random()*3)-1,
-      life:1, decay:.04+Math.random()*.04, r:2, color, type:'spark' });
-  }
+function spark(x,y,col){
+  for(let i=0;i<7;i++){const a=Math.random()*Math.PI*2;
+    parts.push({x,y,vx:Math.cos(a)*(1.5+Math.random()*2.5),vy:Math.sin(a)*(1.5+Math.random()*2.5)-.5,
+      life:1,decay:.05+Math.random()*.04,r:2,col,type:'spark'});}
 }
 
-// ── Draw a sewer room ─────────────────────────────────────────────
-function drawRoom(room, t) {
-  const { sx: cx, sy: cy } = ws(room.cx, room.cy);
-  const r = scl(room.r);
-
-  // Room floor (rough circle)
-  const floorGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-  floorGrad.addColorStop(0, lighten(room.dark, 15));
-  floorGrad.addColorStop(.6, room.dark);
-  floorGrad.addColorStop(1, '#050302');
-  ctx.fillStyle = floorGrad;
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
-
-  // Brick texture lines (radial)
+// ── Brick texture helper ──────────────────────────────────────────
+function drawBricks(cx,cy,r,wallCol,t){
   ctx.save();
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.clip();
-  ctx.strokeStyle = `rgba(0,0,0,0.25)`; ctx.lineWidth = scl(1);
-  for(let ri=1; ri<=4; ri++){
-    ctx.beginPath(); ctx.arc(cx, cy, r*(ri/4), 0, Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.clip();
+  // Mortar base
+  ctx.fillStyle=shade(wallCol,-15);
+  ctx.fillRect(cx-r,cy-r,r*2,r*2);
+  // Brick rows
+  const bh=scl(18), bw=scl(36);
+  ctx.fillStyle=wallCol;
+  for(let row=0;row<Math.ceil(r*2/bh)+1;row++){
+    const oy=(row%2)*(bw*.5);
+    for(let col=0;col<Math.ceil(r*2/bw)+2;col++){
+      const bx=cx-r+col*bw-oy, by=cy-r+row*bh;
+      const noise=Math.sin(bx*0.13+by*0.17)*3;
+      ctx.fillStyle=`rgb(${parseInt(wallCol.slice(1,3),16)+noise|0},${parseInt(wallCol.slice(3,5),16)+noise|0},${parseInt(wallCol.slice(5,7),16)+noise|0})`;
+      ctx.fillRect(bx+1,by+1,bw-2,bh-2);
+    }
   }
-  for(let a=0; a<Math.PI*2; a+=Math.PI/6){
-    ctx.beginPath(); ctx.moveTo(cx, cy);
-    ctx.lineTo(cx+Math.cos(a)*r, cy+Math.sin(a)*r); ctx.stroke();
+  // Mortar lines — subtle darker
+  ctx.strokeStyle=`rgba(0,0,0,.35)`; ctx.lineWidth=1;
+  for(let row=0;row<Math.ceil(r*2/bh)+1;row++){
+    ctx.beginPath(); ctx.moveTo(cx-r,cy-r+row*bh); ctx.lineTo(cx+r,cy-r+row*bh); ctx.stroke();
+    const oy=(row%2)*(bw*.5);
+    for(let col=0;col<Math.ceil(r*2/bw)+2;col++){
+      const bx=cx-r+col*bw-oy;
+      ctx.beginPath(); ctx.moveTo(bx,cy-r+row*bh); ctx.lineTo(bx,cy-r+(row+1)*bh); ctx.stroke();
+    }
   }
   ctx.restore();
-
-  // Room glow
-  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-  glow.addColorStop(0, room.glow);
-  glow.addColorStop(.5, room.glow.replace('0.2','0.07').replace('0.15','0.05'));
-  glow.addColorStop(1, 'transparent');
-  ctx.fillStyle = glow;
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
-
-  // Room-specific furniture
-  drawRoomFurniture(room, cx, cy, r, t);
-
-  // Wall ring
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
-  ctx.strokeStyle = `rgba(${hexToRgb(room.color)},0.35)`; ctx.lineWidth = scl(4); ctx.stroke();
-  ctx.strokeStyle = `rgba(0,0,0,0.7)`; ctx.lineWidth = scl(1.5); ctx.stroke();
-
-  // Room label
-  if(r > 60){
-    ctx.save();
-    ctx.font = `${scl(13)}px 'VT323', monospace`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillStyle = `rgba(${hexToRgb(room.color)},0.55)`;
-    ctx.fillText(room.label, cx, cy - r + scl(14));
-    ctx.restore();
-  }
 }
 
-function drawRoomFurniture(room, cx, cy, r, t) {
-  const s = scl;
-  const pulse = Math.sin(t*.03)*.5+.5;
+// ── Floor texture helper ──────────────────────────────────────────
+function drawFloor(cx,cy,r,floorCol,accentCol){
+  // Wet concrete floor with puddles
+  const fg=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+  fg.addColorStop(0,shade(floorCol,12));
+  fg.addColorStop(.6,floorCol);
+  fg.addColorStop(1,shade(floorCol,-10));
+  ctx.fillStyle=fg;
+  ctx.beginPath(); ctx.arc(cx,cy,r*.97,0,Math.PI*2); ctx.fill();
 
-  switch(room.key){
-    case 'hub': {
-      // Sewer water channel (oval)
-      ctx.fillStyle = '#0a1e2a';
-      ctx.beginPath(); ctx.ellipse(cx, cy+s(20), s(80), s(40), 0, 0, Math.PI*2); ctx.fill();
-      // water shimmer
-      ctx.strokeStyle=`rgba(20,80,120,${0.3+pulse*.2})`; ctx.lineWidth=s(2);
-      for(let i=0;i<3;i++){
-        ctx.beginPath();
-        ctx.moveTo(cx-s(60+i*5), cy+s(10+i*8));
-        ctx.bezierCurveTo(cx-s(20),cy+s(5+i*8),cx+s(20),cy+s(35+i*8),cx+s(60+i*5),cy+s(10+i*8));
-        ctx.stroke();
-      }
-      // manhole cover
-      ctx.fillStyle='#2a2010'; ctx.beginPath(); ctx.arc(cx, cy-s(60), s(30), 0, Math.PI*2); ctx.fill();
-      ctx.strokeStyle='#c8a040'; ctx.lineWidth=s(3);
-      ctx.beginPath(); ctx.arc(cx, cy-s(60), s(28), 0, Math.PI*2); ctx.stroke();
-      // light from manhole
-      const mhl = ctx.createRadialGradient(cx, cy-s(60), 0, cx, cy-s(60), s(60));
-      mhl.addColorStop(0, `rgba(255,220,100,${0.15+pulse*.1})`); mhl.addColorStop(1,'transparent');
-      ctx.fillStyle=mhl; ctx.beginPath(); ctx.arc(cx,cy-s(60),s(60),0,Math.PI*2); ctx.fill();
-      // TV/crate in corner
-      ctx.fillStyle='#1a1408';
-      ctx.beginPath(); ctx.roundRect(cx-s(120), cy-s(30), s(40),s(30),s(4)); ctx.fill();
-      ctx.fillStyle=`rgba(${hexToRgb('#c8a040')},${0.3+pulse*.3})`;
-      ctx.beginPath(); ctx.roundRect(cx-s(118), cy-s(28), s(36),s(22),s(2)); ctx.fill();
-      break;
-    }
-    case 'leo': {
-      // Dojo — training dummy + weapons rack
-      // Tatami mat
-      ctx.fillStyle='#1a1408'; ctx.beginPath(); ctx.ellipse(cx,cy,s(110),s(70),0,0,Math.PI*2); ctx.fill();
-      ctx.strokeStyle='#3a2a10'; ctx.lineWidth=s(2);
-      for(let i=-2;i<=2;i++) for(let j=-1;j<=1;j++){
-        ctx.beginPath();
-        ctx.rect(cx+i*s(44)-s(22), cy+j*s(44)-s(22), s(42),s(42)); ctx.stroke();
-      }
-      // Training dummy
-      ctx.fillStyle='#3a2010';
-      ctx.beginPath(); ctx.arc(cx-s(80), cy, s(12), 0, Math.PI*2); ctx.fill();
-      ctx.fillRect(cx-s(83), cy, s(6), s(40));
-      // Weapons rack (katana silhouettes)
-      ctx.strokeStyle='#8888aa'; ctx.lineWidth=s(2);
-      for(let i=0;i<3;i++){
-        ctx.save(); ctx.translate(cx+s(80), cy-s(50)+i*s(20));
-        ctx.rotate(-.3);
-        ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(s(50),s(10)); ctx.stroke();
-        ctx.restore();
-      }
-      // Glow on mat
-      const lg=ctx.createRadialGradient(cx,cy,0,cx,cy,s(80));
-      lg.addColorStop(0,`rgba(30,144,255,0.06)`); lg.addColorStop(1,'transparent');
-      ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(cx,cy,s(120),0,Math.PI*2); ctx.fill();
-      break;
-    }
-    case 'don': {
-      // Lab — computer screens, beakers, cables
-      // Main desk
-      ctx.fillStyle='#0e0a14';
-      ctx.beginPath(); ctx.roundRect(cx-s(90),cy-s(20),s(180),s(50),s(5)); ctx.fill();
-      // Screens
-      for(let i=0;i<3;i++){
-        const sx=cx-s(70)+i*s(60), sy=cy-s(50);
-        ctx.fillStyle='#0a0010';
-        ctx.beginPath(); ctx.roundRect(sx-s(20),sy-s(25),s(40),s(30),s(3)); ctx.fill();
-        ctx.fillStyle=`rgba(${hexToRgb('#9c27b0')},${0.2+pulse*.4})`;
-        ctx.beginPath(); ctx.roundRect(sx-s(18),sy-s(23),s(36),s(26),s(2)); ctx.fill();
-        // code lines on screen
-        ctx.fillStyle=`rgba(200,150,255,${0.4+pulse*.2})`;
-        for(let l=0;l<3;l++) ctx.fillRect(sx-s(14), sy-s(18)+l*s(7), s(10+Math.random()*18), s(3));
-      }
-      // Beakers
-      for(let i=0;i<2;i++){
-        const bx=cx+s(60+i*25), by=cy-s(5);
-        ctx.strokeStyle='#6040a0'; ctx.lineWidth=s(1.5);
-        ctx.beginPath(); ctx.moveTo(bx-s(8),by-s(20)); ctx.lineTo(bx-s(10),by); ctx.lineTo(bx+s(10),by); ctx.lineTo(bx+s(8),by-s(20)); ctx.stroke();
-        ctx.fillStyle=`rgba(180,80,255,${0.2+pulse*.15})`;
-        ctx.beginPath(); ctx.ellipse(bx,by-s(3),s(8),s(4),0,0,Math.PI*2); ctx.fill();
-      }
-      break;
-    }
-    case 'raph': {
-      // Gym — weights, punching bag
-      // Floor mats
-      ctx.fillStyle='#1a0808';
-      ctx.beginPath(); ctx.roundRect(cx-s(90),cy-s(60),s(180),s(120),s(8)); ctx.fill();
-      // Punching bag
-      ctx.fillStyle='#3a1008'; ctx.beginPath(); ctx.ellipse(cx-s(60), cy, s(18), s(35), 0, 0, Math.PI*2); ctx.fill();
-      ctx.strokeStyle='#c83030'; ctx.lineWidth=s(2);
-      ctx.beginPath(); ctx.moveTo(cx-s(60),cy-s(35)); ctx.lineTo(cx-s(60),cy-s(60)); ctx.stroke();
-      ctx.fillStyle='#8a1010'; ctx.beginPath(); ctx.arc(cx-s(60),cy-s(60),s(5),0,Math.PI*2); ctx.fill();
-      // Barbell
-      ctx.strokeStyle='#707070'; ctx.lineWidth=s(4);
-      ctx.beginPath(); ctx.moveTo(cx+s(30),cy+s(30)); ctx.lineTo(cx+s(100),cy+s(30)); ctx.stroke();
-      for(let i=0;i<2;i++){
-        const wx=cx+s(30+i*70);
-        ctx.fillStyle='#404040';
-        ctx.beginPath(); ctx.ellipse(wx,cy+s(30),s(8),s(16),0,0,Math.PI*2); ctx.fill();
-      }
-      // Motivational glow
-      const rg=ctx.createRadialGradient(cx,cy,0,cx,cy,s(100));
-      rg.addColorStop(0,`rgba(244,67,54,0.07)`); rg.addColorStop(1,'transparent');
-      ctx.fillStyle=rg; ctx.beginPath(); ctx.arc(cx,cy,s(140),0,Math.PI*2); ctx.fill();
-      break;
-    }
-    case 'mikey': {
-      // Studio — easel, pizza boxes, speakers
-      // Pizza boxes stack
-      for(let i=0;i<3;i++){
-        ctx.fillStyle=i===0?'#3a2010':'#2a1808';
-        ctx.beginPath(); ctx.roundRect(cx-s(90+i*2),cy+s(30+i*8),s(40),s(6),s(1)); ctx.fill();
-      }
-      // Easel
-      ctx.strokeStyle='#6a4020'; ctx.lineWidth=s(3);
-      ctx.beginPath(); ctx.moveTo(cx+s(60),cy-s(60)); ctx.lineTo(cx+s(50),cy+s(40)); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx+s(60),cy-s(60)); ctx.lineTo(cx+s(80),cy+s(40)); ctx.stroke();
-      // Canvas
-      ctx.fillStyle='#1a1410';
-      ctx.beginPath(); ctx.roundRect(cx+s(38),cy-s(55),s(44),s(55),s(3)); ctx.fill();
-      ctx.fillStyle=`rgba(${hexToRgb('#ff9800')},${0.15+pulse*.2})`;
-      ctx.beginPath(); ctx.roundRect(cx+s(40),cy-s(53),s(40),s(45),s(2)); ctx.fill();
-      // Speaker glow
-      const mg=ctx.createRadialGradient(cx,cy,0,cx,cy,s(100));
-      mg.addColorStop(0,`rgba(255,152,0,0.08)`); mg.addColorStop(1,'transparent');
-      ctx.fillStyle=mg; ctx.beginPath(); ctx.arc(cx,cy,s(130),0,Math.PI*2); ctx.fill();
-      break;
-    }
-    case 'splinter': {
-      // War room — map table, incense, throne
-      // Map table
-      ctx.fillStyle='#0a0e08';
-      ctx.beginPath(); ctx.ellipse(cx, cy, s(80), s(50), 0, 0, Math.PI*2); ctx.fill();
-      ctx.strokeStyle='#2a4a1a'; ctx.lineWidth=s(1.5);
-      ctx.beginPath(); ctx.ellipse(cx, cy, s(78), s(48), 0, 0, Math.PI*2); ctx.stroke();
-      // Map lines
-      ctx.strokeStyle=`rgba(80,160,50,${0.2+pulse*.15})`; ctx.lineWidth=s(1);
-      for(let i=0;i<5;i++){
-        ctx.beginPath();
-        ctx.moveTo(cx-s(60)+i*s(24), cy-s(30));
-        ctx.lineTo(cx-s(70)+i*s(28), cy+s(30)); ctx.stroke();
-      }
-      // Incense smoke
-      for(let i=0;i<2;i++){
-        const ix=cx+s(-30+i*60), iy=cy-s(40);
-        ctx.strokeStyle=`rgba(200,160,80,${0.1+pulse*.1})`; ctx.lineWidth=s(1.5);
-        ctx.beginPath();
-        ctx.moveTo(ix, iy);
-        ctx.bezierCurveTo(ix-s(8),iy-s(15),ix+s(8),iy-s(30),ix,iy-s(45));
-        ctx.stroke();
-      }
-      // Splinter's throne (top of room)
-      ctx.fillStyle='#1a1008';
-      ctx.beginPath(); ctx.roundRect(cx-s(25), cy-s(100), s(50), s(40), [s(6),s(6),0,0]); ctx.fill();
-      ctx.strokeStyle='rgba(200,160,50,.4)'; ctx.lineWidth=s(2);
-      ctx.beginPath(); ctx.roundRect(cx-s(24), cy-s(99), s(48), s(38), [s(5),s(5),0,0]); ctx.stroke();
-      break;
-    }
-  }
-}
-
-// ── Draw tunnels ──────────────────────────────────────────────────
-function drawTunnel(t1, t2) {
-  const r1 = ROOMS.find(r=>r.key===t1.from), r2 = ROOMS.find(r=>r.key===t1.to);
-  const p1 = ws(r1.cx, r1.cy), p2 = ws(r2.cx, r2.cy);
-  const w = scl(t1.w);
-
-  const dx=p2.sx-p1.sx, dy=p2.sy-p1.sy, len=Math.sqrt(dx*dx+dy*dy);
-  const nx=(-dy/len)*w*.5, ny=(dx/len)*w*.5;
-
-  // Tunnel floor
-  ctx.fillStyle = '#0a0806';
-  ctx.beginPath();
-  ctx.moveTo(p1.sx+nx, p1.sy+ny);
-  ctx.lineTo(p2.sx+nx, p2.sy+ny);
-  ctx.lineTo(p2.sx-nx, p2.sy-ny);
-  ctx.lineTo(p1.sx-nx, p1.sy-ny);
-  ctx.closePath(); ctx.fill();
-
-  // Brick lines along tunnel
-  const steps = Math.floor(len / scl(40));
-  ctx.strokeStyle='rgba(0,0,0,.3)'; ctx.lineWidth=scl(1);
-  for(let i=1;i<steps;i++){
-    const prog=i/steps;
-    const bx=p1.sx+dx*prog, by=p1.sy+dy*prog;
-    ctx.beginPath();
-    ctx.moveTo(bx+nx*.9, by+ny*.9);
-    ctx.lineTo(bx-nx*.9, by-ny*.9);
+  // Floor cracks
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx,cy,r*.97,0,Math.PI*2); ctx.clip();
+  ctx.strokeStyle=`rgba(0,0,0,.25)`; ctx.lineWidth=scl(.8);
+  for(let i=0;i<5;i++){
+    const a=Math.random()*Math.PI*2, cr=Math.random()*r*.7;
+    const x1=cx+Math.cos(a)*cr*.2, y1=cy+Math.sin(a)*cr*.2;
+    const x2=cx+Math.cos(a+.3)*cr, y2=cy+Math.sin(a+.3)*cr;
+    ctx.beginPath(); ctx.moveTo(x1,y1);
+    ctx.bezierCurveTo(x1+(x2-x1)*.3+(Math.random()-.5)*scl(20),y1+(y2-y1)*.3+(Math.random()-.5)*scl(20),
+      x1+(x2-x1)*.7+(Math.random()-.5)*scl(20),y1+(y2-y1)*.7+(Math.random()-.5)*scl(20),x2,y2);
     ctx.stroke();
   }
-
-  // Pipe along ceiling
-  ctx.strokeStyle='rgba(80,60,30,.5)'; ctx.lineWidth=scl(6);
-  ctx.beginPath(); ctx.moveTo(p1.sx+nx*.7, p1.sy+ny*.7); ctx.lineTo(p2.sx+nx*.7, p2.sy+ny*.7); ctx.stroke();
-  ctx.strokeStyle='rgba(60,45,20,.4)'; ctx.lineWidth=scl(4);
-  ctx.beginPath(); ctx.moveTo(p1.sx+nx*.7, p1.sy+ny*.7); ctx.lineTo(p2.sx+nx*.7, p2.sy+ny*.7); ctx.stroke();
-
-  // Glow inside tunnel from room color
-  const tg = ctx.createLinearGradient(p1.sx, p1.sy, p2.sx, p2.sy);
-  tg.addColorStop(0, `rgba(${hexToRgb(r1.color)},0.04)`);
-  tg.addColorStop(1, `rgba(${hexToRgb(r2.color)},0.06)`);
-  ctx.fillStyle=tg;
-  ctx.beginPath();
-  ctx.moveTo(p1.sx+nx*.8, p1.sy+ny*.8);
-  ctx.lineTo(p2.sx+nx*.8, p2.sy+ny*.8);
-  ctx.lineTo(p2.sx-nx*.8, p2.sy-ny*.8);
-  ctx.lineTo(p1.sx-nx*.8, p1.sy-ny*.8);
-  ctx.closePath(); ctx.fill();
+  // Puddle reflections
+  for(let i=0;i<3;i++){
+    const px=cx+(Math.random()-.5)*r*.8, py=cy+(Math.random()-.5)*r*.8;
+    const pr=scl(8+Math.random()*18);
+    const pg=ctx.createRadialGradient(px,py,0,px,py,pr);
+    pg.addColorStop(0,rgba(accentCol,.08));
+    pg.addColorStop(1,'transparent');
+    ctx.fillStyle=pg; ctx.beginPath(); ctx.ellipse(px,py,pr,pr*.35,0,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
 }
 
-// ── Draw a Turtle character (top-down cinematic) ──────────────────
-function drawTurtle(x, y, room, walkPhase, buildPhase, opacity, isWorking) {
+// ── Room furniture ────────────────────────────────────────────────
+function drawFurniture(room,cx,cy,r,t){
+  const s=scl;
+  const p=Math.sin(t*.03)*.5+.5;
+  const c=room.accentColor;
+
+  switch(room.key){
+    case 'hub':{
+      // Sewer channel — long oval water feature
+      ctx.fillStyle='#0a1828';
+      ctx.beginPath(); ctx.ellipse(cx,cy+s(30),s(100),s(48),0,0,Math.PI*2); ctx.fill();
+      // Water surface shimmer layers
+      for(let i=0;i<4;i++){
+        ctx.strokeStyle=`rgba(20,90,150,${.12+i*.04+p*.06})`; ctx.lineWidth=s(1.2);
+        ctx.beginPath();
+        ctx.moveTo(cx-s(80+i*3),cy+s(18+i*7));
+        ctx.bezierCurveTo(cx-s(30),cy+s(12+i*7),cx+s(30),cy+s(42+i*7),cx+s(80+i*3),cy+s(18+i*7));
+        ctx.stroke();
+      }
+      // Manhole above
+      ctx.fillStyle='#1e1608';
+      ctx.beginPath(); ctx.arc(cx,cy-s(80),s(35),0,Math.PI*2); ctx.fill();
+      // Manhole ring detail
+      ctx.strokeStyle='#a08030'; ctx.lineWidth=s(4);
+      ctx.beginPath(); ctx.arc(cx,cy-s(80),s(33),0,Math.PI*2); ctx.stroke();
+      ctx.strokeStyle='#605020'; ctx.lineWidth=s(2);
+      for(let a=0;a<Math.PI*2;a+=Math.PI/4){
+        ctx.beginPath(); ctx.moveTo(cx,cy-s(80));
+        ctx.lineTo(cx+Math.cos(a)*s(33),cy-s(80)+Math.sin(a)*s(33)); ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(cx,cy-s(80),s(15),0,Math.PI*2); ctx.stroke();
+      // Manhole light shaft
+      const mhl=ctx.createRadialGradient(cx,cy-s(80),0,cx,cy-s(80),s(80));
+      mhl.addColorStop(0,`rgba(255,230,120,${.18+p*.08})`);
+      mhl.addColorStop(.4,`rgba(200,170,80,${.06+p*.03})`);
+      mhl.addColorStop(1,'transparent');
+      ctx.fillStyle=mhl; ctx.beginPath(); ctx.arc(cx,cy-s(80),s(80),0,Math.PI*2); ctx.fill();
+      // Old TV on crate
+      ctx.fillStyle='#1c1408'; ctx.beginPath(); ctx.roundRect(cx-s(130),cy-s(45),s(55),s(40),s(3)); ctx.fill();
+      ctx.fillStyle='#0c0c08'; ctx.beginPath(); ctx.roundRect(cx-s(126),cy-s(41),s(44),s(28),s(2)); ctx.fill();
+      ctx.fillStyle=`rgba(${hexRgb(c)},${.2+p*.3})`;
+      ctx.beginPath(); ctx.roundRect(cx-s(125),cy-s(40),s(42),s(26),s(2)); ctx.fill();
+      // Pipes on wall
+      ctx.strokeStyle='#6a5020'; ctx.lineWidth=s(8);
+      ctx.beginPath(); ctx.moveTo(cx-s(200),cy+s(60)); ctx.lineTo(cx+s(200),cy+s(60)); ctx.stroke();
+      ctx.strokeStyle='#4a3810'; ctx.lineWidth=s(5);
+      ctx.beginPath(); ctx.moveTo(cx-s(200),cy+s(60)); ctx.lineTo(cx+s(200),cy+s(60)); ctx.stroke();
+      // Pipe bolts
+      for(let i=-3;i<=3;i++){
+        ctx.fillStyle='#3a2808';
+        ctx.beginPath(); ctx.arc(cx+i*s(60),cy+s(60),s(4),0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle='#6a5020'; ctx.lineWidth=s(1.5);
+        ctx.beginPath(); ctx.arc(cx+i*s(60),cy+s(60),s(4),0,Math.PI*2); ctx.stroke();
+      }
+      // Pizza box on crate
+      ctx.fillStyle='#3a2010'; ctx.beginPath(); ctx.roundRect(cx+s(90),cy-s(10),s(50),s(50),s(2)); ctx.fill();
+      ctx.fillStyle='#2a1808'; ctx.beginPath(); ctx.roundRect(cx+s(92),cy-s(8),s(46),s(5),s(1)); ctx.fill();
+      break;
+    }
+    case 'leo':{
+      // Tatami mats — grid pattern
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx,cy,r*.85,0,Math.PI*2); ctx.clip();
+      for(let row=0;row<5;row++) for(let col=0;col<5;col++){
+        const tx=cx-s(90)+col*s(40), ty=cy-s(90)+row*s(40);
+        ctx.fillStyle=row%2===col%2?'#1c140a':'#181008';
+        ctx.fillRect(tx+s(1),ty+s(1),s(38),s(38));
+        ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.lineWidth=s(1);
+        ctx.strokeRect(tx+s(1),ty+s(1),s(38),s(38));
+      }
+      ctx.restore();
+      // Training dummy — wooden post
+      ctx.fillStyle='#5a3a18';
+      ctx.beginPath(); ctx.roundRect(cx-s(90)-s(8),cy-s(8),s(16),s(50),s(3)); ctx.fill();
+      // Dummy head
+      ctx.fillStyle='#4a2e10';
+      ctx.beginPath(); ctx.arc(cx-s(90),cy-s(15),s(14),0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#6a4a20'; ctx.lineWidth=s(2);
+      ctx.beginPath(); ctx.arc(cx-s(90),cy-s(15),s(13),0,Math.PI*2); ctx.stroke();
+      // Katana rack
+      ctx.fillStyle='#1a1408';
+      ctx.beginPath(); ctx.roundRect(cx+s(65),cy-s(80),s(18),s(80),s(3)); ctx.fill();
+      ctx.strokeStyle='#3a2a10'; ctx.lineWidth=s(1.5);
+      ctx.beginPath(); ctx.roundRect(cx+s(65),cy-s(80),s(18),s(80),s(3)); ctx.stroke();
+      for(let k=0;k<3;k++){
+        // Blade
+        ctx.strokeStyle='rgba(180,190,210,.7)'; ctx.lineWidth=s(2);
+        ctx.beginPath(); ctx.moveTo(cx+s(73),cy-s(72)+k*s(24)); ctx.lineTo(cx+s(73)+s(55),cy-s(62)+k*s(24)); ctx.stroke();
+        // Guard
+        ctx.fillStyle='#b09030';
+        ctx.beginPath(); ctx.ellipse(cx+s(76),cy-s(70)+k*s(24),s(5),s(3),-.3,0,Math.PI*2); ctx.fill();
+        // Handle wrap
+        ctx.strokeStyle='#5a3010'; ctx.lineWidth=s(2.5);
+        ctx.beginPath(); ctx.moveTo(cx+s(73),cy-s(72)+k*s(24)); ctx.lineTo(cx+s(65),cy-s(62)+k*s(24)); ctx.stroke();
+      }
+      // Candles
+      for(let ci=0;ci<2;ci++){
+        const candleX=cx+s(-30+ci*60), candleY=cy+s(70);
+        ctx.fillStyle='#d4c090';
+        ctx.beginPath(); ctx.roundRect(candleX-s(4),candleY-s(20),s(8),s(20),s(2)); ctx.fill();
+        // Flame
+        const fg2=ctx.createRadialGradient(candleX,candleY-s(24),0,candleX,candleY-s(24),s(10));
+        fg2.addColorStop(0,'rgba(255,240,120,.9)'); fg2.addColorStop(.4,'rgba(255,120,30,.4)'); fg2.addColorStop(1,'transparent');
+        ctx.fillStyle=fg2; ctx.beginPath(); ctx.arc(candleX,candleY-s(24),s(10),0,Math.PI*2); ctx.fill();
+      }
+      // Glow
+      const lg=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+      lg.addColorStop(0,rgba(c,.07)); lg.addColorStop(1,'transparent');
+      ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+      break;
+    }
+    case 'don':{
+      // Main workbench
+      ctx.fillStyle='#100818';
+      ctx.beginPath(); ctx.roundRect(cx-s(110),cy-s(25),s(220),s(60),s(5)); ctx.fill();
+      ctx.strokeStyle='#2a1440'; ctx.lineWidth=s(1.5);
+      ctx.beginPath(); ctx.roundRect(cx-s(110),cy-s(25),s(220),s(60),s(5)); ctx.stroke();
+      // Monitor screens (3)
+      for(let i=0;i<3;i++){
+        const mx=cx-s(75)+i*s(70), my=cy-s(80);
+        // Monitor body
+        ctx.fillStyle='#0a0612'; ctx.beginPath(); ctx.roundRect(mx-s(28),my-s(32),s(56),s(42),s(4)); ctx.fill();
+        ctx.strokeStyle='rgba(100,50,150,.4)'; ctx.lineWidth=s(1);
+        ctx.beginPath(); ctx.roundRect(mx-s(28),my-s(32),s(56),s(42),s(4)); ctx.stroke();
+        // Screen content
+        ctx.fillStyle=shade(c,-60); ctx.beginPath(); ctx.roundRect(mx-s(25),my-s(29),s(50),s(36),s(2)); ctx.fill();
+        // Code lines
+        for(let l=0;l<5;l++){
+          const ll=s(8+Math.sin(l*2.3+t*.02)*8);
+          ctx.fillStyle=`rgba(${hexRgb(c)},${.3+p*.25})`;
+          ctx.fillRect(mx-s(22),my-s(24)+l*s(6),ll,s(2.5));
+          if(l%2===0){
+            ctx.fillStyle=`rgba(200,200,255,.15)`;
+            ctx.fillRect(mx-s(22)+ll+s(2),my-s(24)+l*s(6),s(4+Math.random()*8),s(2.5));
+          }
+        }
+        // Monitor stand
+        ctx.fillStyle='#1a0e28'; ctx.beginPath(); ctx.roundRect(mx-s(6),my+s(10),s(12),s(16),s(2)); ctx.fill();
+      }
+      // Cables on desk
+      ctx.strokeStyle='rgba(40,20,60,.8)'; ctx.lineWidth=s(3);
+      for(let i=0;i<4;i++){
+        ctx.beginPath();
+        ctx.moveTo(cx-s(80)+i*s(50),cy-s(25));
+        ctx.bezierCurveTo(cx-s(70)+i*s(50),cy,cx-s(60)+i*s(50),cy-s(10),cx-s(50)+i*s(50),cy+s(10));
+        ctx.stroke();
+      }
+      // Beakers on side shelf
+      ctx.fillStyle='#1a0c24';
+      ctx.beginPath(); ctx.roundRect(cx+s(70),cy-s(40),s(50),s(10),s(2)); ctx.fill();
+      for(let b=0;b<2;b++){
+        const bx=cx+s(78+b*26), by=cy-s(30);
+        ctx.strokeStyle=rgba(c,.5); ctx.lineWidth=s(1.5);
+        ctx.beginPath();
+        ctx.moveTo(bx-s(7),by-s(24)); ctx.lineTo(bx-s(9),by); ctx.lineTo(bx+s(9),by); ctx.lineTo(bx+s(7),by-s(24));
+        ctx.stroke();
+        const liquid=ctx.createLinearGradient(bx,by-s(10),bx,by);
+        liquid.addColorStop(0,rgba(c,.4)); liquid.addColorStop(1,rgba(c,.15));
+        ctx.fillStyle=liquid;
+        ctx.beginPath(); ctx.moveTo(bx-s(8),by-s(8)); ctx.lineTo(bx-s(9),by); ctx.lineTo(bx+s(9),by); ctx.lineTo(bx+s(8),by-s(8)); ctx.fill();
+        // Bubble
+        if(Math.sin(t*.08+b*2)>0.7){
+          ctx.fillStyle=rgba(c,.6);
+          ctx.beginPath(); ctx.arc(bx+(Math.random()-.5)*s(5),by-s(12),s(2),0,Math.PI*2); ctx.fill();
+        }
+      }
+      // Glow
+      const dg=ctx.createRadialGradient(cx,cy-s(50),0,cx,cy-s(50),r*.7);
+      dg.addColorStop(0,rgba(c,.06)); dg.addColorStop(1,'transparent');
+      ctx.fillStyle=dg; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+      break;
+    }
+    case 'raph':{
+      // Rubber floor mats
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx,cy,r*.88,0,Math.PI*2); ctx.clip();
+      ctx.fillStyle='#180808';
+      ctx.fillRect(cx-r,cy-r,r*2,r*2);
+      ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.lineWidth=s(1.5);
+      for(let i=-6;i<=6;i++) for(let j=-6;j<=6;j++){
+        ctx.strokeRect(cx+i*s(30),cy+j*s(30),s(30),s(30));
+      }
+      ctx.restore();
+      // Heavy bag
+      const bagSway=Math.sin(t*.04)*s(3);
+      ctx.strokeStyle='#4a2a08'; ctx.lineWidth=s(3);
+      ctx.beginPath(); ctx.moveTo(cx-s(80)+bagSway,cy-s(90)); ctx.lineTo(cx-s(80)+bagSway,cy-s(70)); ctx.stroke();
+      const bagGrad=ctx.createLinearGradient(cx-s(95)+bagSway,0,cx-s(65)+bagSway,0);
+      bagGrad.addColorStop(0,'#300808'); bagGrad.addColorStop(.4,'#5a1010'); bagGrad.addColorStop(1,'#300808');
+      ctx.fillStyle=bagGrad;
+      ctx.beginPath(); ctx.roundRect(cx-s(96)+bagSway,cy-s(70),s(32),s(60),s(8)); ctx.fill();
+      // Tape strips
+      ctx.strokeStyle=rgba(c,.5); ctx.lineWidth=s(3);
+      for(let ti=0;ti<3;ti++){
+        ctx.beginPath(); ctx.moveTo(cx-s(96)+bagSway,cy-s(60)+ti*s(18)); ctx.lineTo(cx-s(64)+bagSway,cy-s(60)+ti*s(18)); ctx.stroke();
+      }
+      // Barbell rack
+      ctx.fillStyle='#1e1010';
+      ctx.beginPath(); ctx.roundRect(cx+s(40),cy-s(20),s(10),s(80),s(3)); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(cx+s(90),cy-s(20),s(10),s(80),s(3)); ctx.fill();
+      // Barbell bar
+      ctx.strokeStyle='#707888'; ctx.lineWidth=s(5);
+      ctx.beginPath(); ctx.moveTo(cx+s(45),cy+s(30)); ctx.lineTo(cx+s(95),cy+s(30)); ctx.stroke();
+      // Weight plates
+      for(let wi=0;wi<2;wi++){
+        const wx=cx+s(43+wi*50);
+        const wg=ctx.createRadialGradient(wx,cy+s(30),0,wx,cy+s(30),s(16));
+        wg.addColorStop(0,'#505060'); wg.addColorStop(.6,'#303040'); wg.addColorStop(1,'#202030');
+        ctx.fillStyle=wg;
+        ctx.beginPath(); ctx.ellipse(wx,cy+s(30),s(7),s(16),0,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle='#404050'; ctx.lineWidth=s(1);
+        ctx.beginPath(); ctx.ellipse(wx,cy+s(30),s(7),s(16),0,0,Math.PI*2); ctx.stroke();
+      }
+      // Motivational poster on wall (rough rect)
+      ctx.fillStyle='#200808';
+      ctx.beginPath(); ctx.roundRect(cx-s(20),cy-s(80),s(40),s(30),s(2)); ctx.fill();
+      ctx.fillStyle=rgba(c,.35);
+      ctx.beginPath(); ctx.roundRect(cx-s(18),cy-s(78),s(36),s(26),s(2)); ctx.fill();
+      break;
+    }
+    case 'mikey':{
+      // Graffiti-style colourful floor
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx,cy,r*.9,0,Math.PI*2); ctx.clip();
+      // Paint splatter marks
+      for(let sp=0;sp<8;sp++){
+        const sx=cx+(Math.random()-.5)*r*1.4, sy=cy+(Math.random()-.5)*r*1.4;
+        const sg=ctx.createRadialGradient(sx,sy,0,sx,sy,s(20+Math.random()*30));
+        const cols=['#c83000','#0040c8','#c8a000','#008840'];
+        sg.addColorStop(0,rgba(cols[sp%4],.08)); sg.addColorStop(1,'transparent');
+        ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(sx,sy,s(30),0,Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+      // Easel
+      ctx.strokeStyle='#6a4820'; ctx.lineWidth=s(4);
+      ctx.beginPath(); ctx.moveTo(cx+s(55),cy-s(75)); ctx.lineTo(cx+s(40),cy+s(50)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx+s(55),cy-s(75)); ctx.lineTo(cx+s(75),cy+s(50)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx+s(43),cy+s(20)); ctx.lineTo(cx+s(72),cy+s(20)); ctx.stroke();
+      // Canvas on easel
+      ctx.fillStyle='#1a1510';
+      ctx.beginPath(); ctx.roundRect(cx+s(28),cy-s(72),s(54),s(60),s(3)); ctx.fill();
+      // Painting in progress
+      const paintColors=['#cc3300','#dd8800','#2255cc','#228833'];
+      for(let pi=0;pi<6;pi++){
+        ctx.fillStyle=rgba(paintColors[pi%4],.3+p*.15);
+        ctx.beginPath();
+        ctx.ellipse(cx+s(42+Math.sin(pi*1.2)*12),cy-s(55+Math.cos(pi*.9)*18),s(8+pi*2),s(6+pi),pi*.5,0,Math.PI*2);
+        ctx.fill();
+      }
+      // Pizza boxes stacked
+      for(let pb=0;pb<4;pb++){
+        ctx.fillStyle=pb%2===0?'#3a2010':'#2a1808';
+        ctx.beginPath(); ctx.roundRect(cx-s(110+pb*1.5),cy+s(30+pb*6),s(50),s(7),s(1)); ctx.fill();
+        ctx.strokeStyle='rgba(0,0,0,.3)'; ctx.lineWidth=s(.5);
+        ctx.beginPath(); ctx.roundRect(cx-s(110+pb*1.5),cy+s(30+pb*6),s(50),s(7),s(1)); ctx.stroke();
+      }
+      // Nunchaku on wall
+      ctx.strokeStyle='#4a3010'; ctx.lineWidth=s(4);
+      ctx.beginPath(); ctx.moveTo(cx-s(55),cy-s(75)); ctx.lineTo(cx-s(40),cy-s(55)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx-s(35),cy-s(45)); ctx.lineTo(cx-s(20),cy-s(62)); ctx.stroke();
+      ctx.strokeStyle='#888'; ctx.lineWidth=s(1.5);
+      ctx.beginPath(); ctx.moveTo(cx-s(40),cy-s(55)); ctx.lineTo(cx-s(35),cy-s(45)); ctx.stroke();
+      // Speakers (big boxy)
+      for(let sp=0;sp<2;sp++){
+        const spx=cx+s(-115+sp*230);
+        ctx.fillStyle='#151008';
+        ctx.beginPath(); ctx.roundRect(spx-s(16),cy-s(20),s(32),s(40),s(4)); ctx.fill();
+        ctx.strokeStyle=rgba(c,0.2+Math.abs(Math.sin(t*.05))*.3); ctx.lineWidth=s(2);
+        ctx.beginPath(); ctx.arc(spx,cy-s(5),s(10),0,Math.PI*2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(spx,cy+s(12),s(6),0,Math.PI*2); ctx.stroke();
+      }
+      break;
+    }
+    case 'splinter':{
+      // Stone floor pattern
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx,cy,r*.9,0,Math.PI*2); ctx.clip();
+      ctx.fillStyle='#080c06';
+      ctx.fillRect(cx-r,cy-r,r*2,r*2);
+      for(let si=0;si<12;si++){
+        const sa=(si/12)*Math.PI*2, sr=s(30+si*15);
+        ctx.strokeStyle=`rgba(0,0,0,${.2+si*.01})`; ctx.lineWidth=s(1.5);
+        ctx.beginPath(); ctx.arc(cx,cy,sr,sa,sa+Math.PI*.4); ctx.stroke();
+      }
+      ctx.restore();
+      // Meditation mat / rug
+      const rugGrad=ctx.createRadialGradient(cx,cy+s(20),0,cx,cy+s(20),s(75));
+      rugGrad.addColorStop(0,'#1a2010'); rugGrad.addColorStop(1,'#0c1208');
+      ctx.fillStyle=rugGrad;
+      ctx.beginPath(); ctx.ellipse(cx,cy+s(20),s(70),s(45),0,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(80,120,40,.4)'; ctx.lineWidth=s(1.5);
+      ctx.beginPath(); ctx.ellipse(cx,cy+s(20),s(68),s(43),0,0,Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(cx,cy+s(20),s(50),s(30),0,0,Math.PI*2); ctx.stroke();
+      // Map table (top of room)
+      ctx.fillStyle='#0e1408';
+      ctx.beginPath(); ctx.ellipse(cx,cy-s(55),s(70),s(45),0,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(60,100,30,.5)'; ctx.lineWidth=s(2);
+      ctx.beginPath(); ctx.ellipse(cx,cy-s(55),s(68),s(43),0,0,Math.PI*2); ctx.stroke();
+      // Map tactical lines
+      ctx.strokeStyle=rgba(c,.18+p*.08); ctx.lineWidth=s(1);
+      for(let ml=0;ml<6;ml++){
+        const ma=ml/6*Math.PI*2;
+        ctx.beginPath(); ctx.moveTo(cx,cy-s(55)); ctx.lineTo(cx+Math.cos(ma)*s(60),cy-s(55)+Math.sin(ma)*s(35)); ctx.stroke();
+      }
+      // Incense sticks
+      for(let ic=0;ic<3;ic++){
+        const icx=cx+s(-25+ic*25), icy=cy+s(80);
+        ctx.strokeStyle='#8a6030'; ctx.lineWidth=s(1.5);
+        ctx.beginPath(); ctx.moveTo(icx,icy); ctx.lineTo(icx+s(3),icy-s(30)); ctx.stroke();
+        // Smoke
+        ctx.strokeStyle=`rgba(180,150,100,${.08+p*.06})`; ctx.lineWidth=s(1);
+        const st=t*.015+ic;
+        ctx.beginPath();
+        ctx.moveTo(icx+s(3),icy-s(30));
+        ctx.bezierCurveTo(icx+s(3)+Math.sin(st)*s(6),icy-s(42),icx+s(3)-Math.sin(st+1)*s(8),icy-s(55),icx+s(3)+Math.sin(st+2)*s(5),icy-s(68));
+        ctx.stroke();
+      }
+      // Glow
+      const sg=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+      sg.addColorStop(0,rgba(c,.06)); sg.addColorStop(1,'transparent');
+      ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+      break;
+    }
+  }
+}
+
+// ── Draw a Turtle (top-down, realistic curved) ────────────────────
+function drawTurtle(x,y,room,walkPhase,buildPhase,opacity,isWorking){
   if(opacity<=0) return;
-  const s = scl;
-  const { sx, sy } = ws(x, y);
-  const sc = room ? scl(18) : scl(22);
-  const bandana = room ? room.bandana : '#888';
-  const glow = room ? room.color : '#888';
+  const {sx,sy}=ws(x,y);
+  const sc=scl(20);
+  const bandana=room.bandana;
+  const isSplinter=room.isSplinter||false;
 
   ctx.save();
-  ctx.globalAlpha = opacity;
-  ctx.translate(sx, sy);
+  ctx.globalAlpha=opacity;
+  ctx.translate(sx,sy);
 
-  const wobble = Math.sin(walkPhase * 4) * (isWorking ? 1 : 2);
+  const bob=Math.abs(Math.sin(walkPhase*4))*sc*.04;
 
-  // Shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  ctx.beginPath(); ctx.ellipse(wobble*.3, sc*.15, sc*.6, sc*.3, 0, 0, Math.PI*2); ctx.fill();
+  if(isSplinter){
+    // ── SPLINTER — RAT ─────────────────────────────────────────
+    const rs=sc*1.05;
 
-  // Shell (main body - oval)
-  const shellGrad = ctx.createRadialGradient(-sc*.15, -sc*.1, 0, 0, 0, sc*.9);
-  shellGrad.addColorStop(0, '#5a4818');
-  shellGrad.addColorStop(.5, '#3a2e0e');
-  shellGrad.addColorStop(1, '#1e1808');
-  ctx.fillStyle = shellGrad;
-  ctx.beginPath(); ctx.ellipse(0, 0, sc*.75, sc*.8, wobble*.03, 0, Math.PI*2); ctx.fill();
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,.35)';
+    ctx.beginPath(); ctx.ellipse(0,rs*.1,rs*.7,rs*.28,0,0,Math.PI*2); ctx.fill();
 
-  // Shell segments
-  ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.lineWidth=sc*.08;
-  ctx.beginPath(); ctx.moveTo(-sc*.3, 0); ctx.lineTo(sc*.3, 0); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0, -sc*.3); ctx.lineTo(0, sc*.3); ctx.stroke();
-  ctx.beginPath(); ctx.ellipse(0, 0, sc*.45, sc*.5, 0, 0, Math.PI*2); ctx.stroke();
+    // Robe / body (hunched rat shape)
+    const robeG=ctx.createRadialGradient(-rs*.1,-rs*.05,0,0,0,rs*.85);
+    robeG.addColorStop(0,'#2e3820'); robeG.addColorStop(.6,'#1e2814'); robeG.addColorStop(1,'#101408');
+    ctx.fillStyle=robeG;
+    ctx.beginPath(); ctx.ellipse(0,0,rs*.72,rs*.78,0,0,Math.PI*2); ctx.fill();
+    // Robe detail lines
+    ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.lineWidth=rs*.04;
+    ctx.beginPath(); ctx.moveTo(0,-rs*.4); ctx.lineTo(-rs*.1,rs*.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,-rs*.4); ctx.lineTo(rs*.1,rs*.4); ctx.stroke();
 
-  // Skin (arms/legs visible around shell)
-  ctx.fillStyle = '#3a7a20';
-  // legs
-  for(let i=0;i<4;i++){
-    const la = (i/4)*Math.PI*2 + Math.PI*.125;
-    const lw = i%2===0 ? Math.sin(walkPhase*4)*.12 : -Math.sin(walkPhase*4)*.12;
+    // Paws (small, dark)
+    for(let pi=0;pi<4;pi++){
+      const pa=(pi/4)*Math.PI*2+Math.PI*.125;
+      const pw=pi%2===0?Math.sin(walkPhase*4)*.08:-Math.sin(walkPhase*4)*.08;
+      ctx.fillStyle='#5a4030';
+      ctx.beginPath(); ctx.ellipse(Math.cos(pa)*rs*.68,Math.sin(pa)*rs*.65+pw*rs,rs*.13,rs*.16,pa,0,Math.PI*2); ctx.fill();
+    }
+
+    // Tail
+    ctx.strokeStyle='#5a4030'; ctx.lineWidth=rs*.08;
     ctx.beginPath();
-    ctx.ellipse(Math.cos(la)*sc*.75, Math.sin(la)*sc*.75+lw*sc, sc*.18, sc*.22, la, 0, Math.PI*2);
+    ctx.moveTo(rs*.3,rs*.5);
+    ctx.bezierCurveTo(rs*.6,rs*.7,rs*.9,rs*.4,rs*.85,-rs*.1);
+    ctx.stroke();
+    ctx.strokeStyle='#4a3020'; ctx.lineWidth=rs*.04;
+    ctx.beginPath();
+    ctx.moveTo(rs*.3,rs*.5);
+    ctx.bezierCurveTo(rs*.6,rs*.7,rs*.9,rs*.4,rs*.85,-rs*.1);
+    ctx.stroke();
+
+    // Head — elongated snout
+    ctx.save();
+    ctx.translate(0,-rs*.85);
+
+    // Ears (round, on top)
+    for(let e=0;e<2;e++){
+      const ex=(e-.5)*rs*.5;
+      ctx.fillStyle='#5a4030';
+      ctx.beginPath(); ctx.arc(ex,-rs*.1,rs*.18,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#8a5040';
+      ctx.beginPath(); ctx.arc(ex,-rs*.1,rs*.1,0,Math.PI*2); ctx.fill();
+    }
+
+    // Skull
+    const headG=ctx.createRadialGradient(-rs*.08,-rs*.05,0,0,0,rs*.4);
+    headG.addColorStop(0,'#6a5040'); headG.addColorStop(.5,'#4a3828'); headG.addColorStop(1,'#302418');
+    ctx.fillStyle=headG;
+    ctx.beginPath(); ctx.ellipse(0,-rs*.02,rs*.36,rs*.32,0,0,Math.PI*2); ctx.fill();
+
+    // Snout (elongated forward — pointing down in top-down)
+    ctx.fillStyle='#5a4030';
+    ctx.beginPath();
+    ctx.ellipse(0,rs*.22,rs*.22,rs*.3,.0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#4a3020';
+    ctx.beginPath();
+    ctx.ellipse(0,rs*.28,rs*.18,rs*.24,0,0,Math.PI*2); ctx.fill();
+
+    // Nose (pink, tip of snout)
+    ctx.fillStyle='#c87070';
+    ctx.beginPath(); ctx.ellipse(0,rs*.43,rs*.09,rs*.07,0,0,Math.PI*2); ctx.fill();
+
+    // Nostrils
+    ctx.fillStyle='rgba(0,0,0,.5)';
+    ctx.beginPath(); ctx.ellipse(-rs*.04,rs*.44,rs*.03,rs*.025,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(rs*.04,rs*.44,rs*.03,rs*.025,0,0,Math.PI*2); ctx.fill();
+
+    // Whiskers
+    ctx.strokeStyle='rgba(220,200,170,.55)'; ctx.lineWidth=rs*.018;
+    for(let w=0;w<3;w++){
+      const wy=rs*(.25+w*.07);
+      ctx.beginPath(); ctx.moveTo(-rs*.1,wy); ctx.lineTo(-rs*.55,wy-rs*(.05-w*.02)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(rs*.1,wy);  ctx.lineTo(rs*.55,wy-rs*(.05-w*.02));  ctx.stroke();
+    }
+
+    // Eyes (beady, dark, with green glow)
+    ctx.fillStyle='#c0a070';
+    ctx.beginPath(); ctx.ellipse(-rs*.14,rs*.05,rs*.06,rs*.055,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(rs*.14,rs*.05,rs*.06,rs*.055,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#1a1008';
+    ctx.beginPath(); ctx.ellipse(-rs*.14,rs*.05,rs*.04,rs*.038,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(rs*.14,rs*.05,rs*.04,rs*.038,0,0,Math.PI*2); ctx.fill();
+    // Eye gleam
+    ctx.fillStyle='rgba(180,220,100,.7)';
+    ctx.shadowColor='#449933'; ctx.shadowBlur=rs*.4;
+    ctx.beginPath(); ctx.arc(-rs*.12,rs*.03,rs*.015,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(rs*.12,rs*.03,rs*.015,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+
+    // Robes collar visible around head
+    ctx.strokeStyle='rgba(40,55,25,.6)'; ctx.lineWidth=rs*.06;
+    ctx.beginPath(); ctx.arc(0,0,rs*.3,Math.PI*.6,Math.PI*2.4); ctx.stroke();
+
+    ctx.restore();
+
+    // Staff
+    ctx.strokeStyle='#6a4818'; ctx.lineWidth=rs*.1;
+    ctx.beginPath(); ctx.moveTo(-rs*.3,rs*.6); ctx.lineTo(rs*.4,-rs*.85); ctx.stroke();
+    ctx.fillStyle='#8a6020';
+    ctx.beginPath(); ctx.arc(rs*.4,-rs*.85,rs*.1,0,Math.PI*2); ctx.fill();
+
+  } else {
+    // ── TURTLE ───────────────────────────────────────────────────
+    const ts=sc;
+
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,.38)';
+    ctx.beginPath(); ctx.ellipse(0,ts*.12,ts*.65,ts*.28,0,0,Math.PI*2); ctx.fill();
+
+    // Shell — detailed with hexagonal scutes
+    const shellG=ctx.createRadialGradient(-ts*.12,-ts*.08,0,0,0,ts*.88);
+    shellG.addColorStop(0,'#6a5220');
+    shellG.addColorStop(.45,'#4a3a12');
+    shellG.addColorStop(.8,'#2e2408');
+    shellG.addColorStop(1,'#1a1404');
+    ctx.fillStyle=shellG;
+    ctx.beginPath(); ctx.ellipse(0,0,ts*.76,ts*.82,0,0,Math.PI*2); ctx.fill();
+
+    // Shell scute pattern (hexagon-ish segments)
+    ctx.strokeStyle='rgba(0,0,0,.55)'; ctx.lineWidth=ts*.06;
+    // Center scute
+    ctx.beginPath(); ctx.ellipse(0,-ts*.1,ts*.28,ts*.3,0,0,Math.PI*2); ctx.stroke();
+    // Ring of 5 scutes
+    for(let i=0;i<5;i++){
+      const sa=(i/5)*Math.PI*2-Math.PI*.5;
+      ctx.beginPath(); ctx.ellipse(Math.cos(sa)*ts*.44,Math.sin(sa)*ts*.44+ts*.05,ts*.18,ts*.2,sa,0,Math.PI*2); ctx.stroke();
+    }
+    // Shell rim
+    ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.lineWidth=ts*.04;
+    ctx.beginPath(); ctx.ellipse(0,0,ts*.73,ts*.79,0,0,Math.PI*2); ctx.stroke();
+
+    // Limbs around shell
+    ctx.fillStyle='#3a7820';
+    for(let li=0;li<4;li++){
+      const la=(li/4)*Math.PI*2+Math.PI*.125;
+      const lswing=li%2===0?Math.sin(walkPhase*4):.12:-Math.sin(walkPhase*4)*.12;
+      ctx.beginPath();
+      ctx.ellipse(Math.cos(la)*ts*.73,Math.sin(la)*ts*.74+lswing*ts,ts*.19,ts*.24,la,0,Math.PI*2);
+      ctx.fill();
+      // Claw details
+      ctx.strokeStyle='#2a5a10'; ctx.lineWidth=ts*.025;
+      ctx.beginPath(); ctx.ellipse(Math.cos(la)*ts*.73,Math.sin(la)*ts*.74+lswing*ts,ts*.17,ts*.22,la,0,Math.PI*2); ctx.stroke();
+    }
+
+    // Neck
+    const neckG=ctx.createRadialGradient(0,-ts*.55,0,0,-ts*.55,ts*.18);
+    neckG.addColorStop(0,'#4a9028'); neckG.addColorStop(1,'#2a5a14');
+    ctx.fillStyle=neckG;
+    ctx.beginPath(); ctx.ellipse(0,-ts*.55,ts*.15,ts*.22,0,0,Math.PI*2); ctx.fill();
+
+    // Head
+    const headG2=ctx.createRadialGradient(-ts*.1,-ts*.85,0,0,-ts*.85,ts*.38);
+    headG2.addColorStop(0,'#52a030'); headG2.addColorStop(.5,'#3a8020'); headG2.addColorStop(1,'#2a5a14');
+    ctx.fillStyle=headG2;
+    ctx.beginPath(); ctx.ellipse(0,-ts*.84,ts*.34,ts*.32,0,0,Math.PI*2); ctx.fill();
+
+    // Bandana — fabric folds
+    const bandDk=shade(bandana,-35);
+    ctx.fillStyle=bandana;
+    ctx.beginPath(); ctx.roundRect(-ts*.33,-ts*1.02,ts*.66,ts*.18,ts*.04); ctx.fill();
+    // Bandana highlight fold
+    ctx.fillStyle=shade(bandana,20);
+    ctx.beginPath(); ctx.roundRect(-ts*.3,-ts*1.0,ts*.6,ts*.05,ts*.02); ctx.fill();
+    // Bandana shadow fold
+    ctx.fillStyle=bandDk;
+    ctx.beginPath(); ctx.roundRect(-ts*.32,-ts*.88,ts*.64,ts*.04,ts*.02); ctx.fill();
+
+    // Eye holes in bandana
+    ctx.fillStyle='rgba(0,0,0,.7)';
+    ctx.beginPath(); ctx.ellipse(-ts*.11,-ts*.93,ts*.075,ts*.06,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(ts*.11,-ts*.93,ts*.075,ts*.06,0,0,Math.PI*2); ctx.fill();
+
+    // Eyes — irises with pupils
+    const eyeIrisCol=shade(bandana,30);
+    ctx.fillStyle=eyeIrisCol;
+    ctx.beginPath(); ctx.ellipse(-ts*.11,-ts*.935,ts*.042,ts*.038,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(ts*.11,-ts*.935,ts*.042,ts*.038,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#060808';
+    ctx.beginPath(); ctx.ellipse(-ts*.11,-ts*.935,ts*.022,ts*.022,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(ts*.11,-ts*.935,ts*.022,ts*.022,0,0,Math.PI*2); ctx.fill();
+    // Eye shine
+    ctx.fillStyle='rgba(255,255,255,.7)';
+    ctx.beginPath(); ctx.arc(-ts*.1,-ts*.945,ts*.01,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ts*.12,-ts*.945,ts*.01,0,Math.PI*2); ctx.fill();
+    // Eye glow
+    ctx.shadowColor=bandana; ctx.shadowBlur=ts*.35;
+    ctx.fillStyle=rgba(bandana,.6);
+    ctx.beginPath(); ctx.ellipse(-ts*.11,-ts*.935,ts*.035,ts*.03,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(ts*.11,-ts*.935,ts*.035,ts*.03,0,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+
+    // Bandana tails behind head
+    ctx.fillStyle=bandDk;
+    ctx.beginPath();
+    ctx.moveTo(ts*.07,-ts*.88); ctx.quadraticCurveTo(ts*.28,-ts*.7,ts*.22,-ts*.55);
+    ctx.lineTo(ts*.1,-ts*.56); ctx.quadraticCurveTo(ts*.15,-ts*.72,ts*.0,-ts*.85); ctx.closePath();
     ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(ts*.14,-ts*.88); ctx.quadraticCurveTo(ts*.38,-ts*.65,ts*.3,-ts*.5);
+    ctx.lineTo(ts*.18,-ts*.52); ctx.quadraticCurveTo(ts*.22,-ts*.66,ts*.08,-ts*.82); ctx.closePath();
+    ctx.fill();
+
+    // Nostril slits
+    ctx.fillStyle='rgba(0,0,0,.45)';
+    ctx.beginPath(); ctx.ellipse(-ts*.04,-ts*.74,ts*.025,ts*.015,.3,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(ts*.04,-ts*.74,ts*.025,ts*.015,-.3,0,Math.PI*2); ctx.fill();
   }
 
-  // Head (top circle)
-  const headGrad = ctx.createRadialGradient(-sc*.1, -sc*.85, 0, 0, -sc*.82, sc*.38);
-  headGrad.addColorStop(0, '#4a9028'); headGrad.addColorStop(1, '#2a5a14');
-  ctx.fillStyle = headGrad;
-  ctx.beginPath(); ctx.arc(0, -sc*.82, sc*.35, 0, Math.PI*2); ctx.fill();
-
-  // Bandana (colored mask over eyes)
-  ctx.fillStyle = bandana;
-  ctx.beginPath(); ctx.roundRect(-sc*.34, -sc*1.02, sc*.68, sc*.2, sc*.04); ctx.fill();
-
-  // Bandana eye holes
-  ctx.fillStyle = '#111a0a';
-  ctx.beginPath(); ctx.ellipse(-sc*.12, -sc*.92, sc*.1, sc*.07, 0, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(sc*.12, -sc*.92, sc*.1, sc*.07, 0, 0, Math.PI*2); ctx.fill();
-
-  // Eye glow
-  ctx.fillStyle = glow;
-  ctx.shadowColor = glow; ctx.shadowBlur = sc*.5;
-  ctx.beginPath(); ctx.ellipse(-sc*.12, -sc*.93, sc*.05, sc*.04, 0, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(sc*.12, -sc*.93, sc*.05, sc*.04, 0, 0, Math.PI*2); ctx.fill();
-  ctx.shadowBlur = 0;
-
-  // Bandana tails (behind head)
-  ctx.fillStyle = shadeColor(bandana, -20);
-  ctx.beginPath(); ctx.moveTo(sc*.1, -sc*.88); ctx.lineTo(sc*.22, -sc*.65); ctx.lineTo(sc*.08, -sc*.62); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(sc*.15, -sc*.88); ctx.lineTo(sc*.32, -sc*.58); ctx.lineTo(sc*.18, -sc*.56); ctx.closePath(); ctx.fill();
-
-  // Build indicator
+  // Working indicator
   if(isWorking){
-    ctx.fillStyle = glow; ctx.shadowColor=glow; ctx.shadowBlur=sc*.8;
-    ctx.font = `${sc*.8}px VT323, monospace`;
+    ctx.shadowColor=room.bandana; ctx.shadowBlur=sc*.6;
+    ctx.fillStyle=room.bandana;
+    ctx.font=`${sc*.75}px VT323,monospace`;
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('⚙', 0, -sc*1.5);
+    ctx.fillText('⚙',0,-sc*(isSplinter?2.1:1.65));
     ctx.shadowBlur=0;
   }
 
   ctx.restore();
 }
 
-// ── Turtle bots ───────────────────────────────────────────────────
-const turtles = ROOMS.filter(r=>r.bandana).map(room => ({
-  room,
-  x: room.cx + (Math.random()-.5)*60,
-  y: room.cy + (Math.random()-.5)*60,
-  tx: room.cx, ty: room.cy,
-  walkPhase: Math.random()*10,
-  buildPhase: 0,
-  state: 'idle',
-  idleTimer: Math.random()*100,
-  buildTimer: 0,
-  opacity: 0,
-  built: 0,
+// ── Draw tunnels ──────────────────────────────────────────────────
+function drawTunnel(tn){
+  const r1=ROOMS.find(r=>r.key===tn.from), r2=ROOMS.find(r=>r.key===tn.to);
+  const p1=ws(r1.cx,r1.cy), p2=ws(r2.cx,r2.cy);
+  const hw=scl(tn.w)*.5;
+  const dx=p2.sx-p1.sx, dy=p2.sy-p1.sy, len=Math.sqrt(dx*dx+dy*dy);
+  const nx=(-dy/len)*hw, ny=(dx/len)*hw;
+
+  // Tunnel wall (outer)
+  ctx.fillStyle='#080604';
+  ctx.beginPath();
+  ctx.moveTo(p1.sx+nx*1.2,p1.sy+ny*1.2); ctx.lineTo(p2.sx+nx*1.2,p2.sy+ny*1.2);
+  ctx.lineTo(p2.sx-nx*1.2,p2.sy-ny*1.2); ctx.lineTo(p1.sx-nx*1.2,p1.sy-ny*1.2);
+  ctx.closePath(); ctx.fill();
+
+  // Tunnel floor
+  const tfG=ctx.createLinearGradient(p1.sx,p1.sy,p2.sx,p2.sy);
+  tfG.addColorStop(0,r1.floorColor); tfG.addColorStop(1,r2.floorColor);
+  ctx.fillStyle=tfG;
+  ctx.beginPath();
+  ctx.moveTo(p1.sx+nx,p1.sy+ny); ctx.lineTo(p2.sx+nx,p2.sy+ny);
+  ctx.lineTo(p2.sx-nx,p2.sy-ny); ctx.lineTo(p1.sx-nx,p1.sy-ny);
+  ctx.closePath(); ctx.fill();
+
+  // Wet floor sheen
+  ctx.fillStyle='rgba(255,255,255,.015)';
+  ctx.beginPath();
+  ctx.moveTo(p1.sx+nx*.1,p1.sy+ny*.1); ctx.lineTo(p2.sx+nx*.1,p2.sy+ny*.1);
+  ctx.lineTo(p2.sx+nx*.3,p2.sy+ny*.3); ctx.lineTo(p1.sx+nx*.3,p1.sy+ny*.3);
+  ctx.closePath(); ctx.fill();
+
+  // Brick cross-lines
+  const steps=Math.floor(len/scl(36));
+  ctx.strokeStyle='rgba(0,0,0,.25)'; ctx.lineWidth=scl(1);
+  for(let i=1;i<steps;i++){
+    const prog=i/steps, bx=p1.sx+dx*prog, by=p1.sy+dy*prog;
+    ctx.beginPath(); ctx.moveTo(bx+nx*.92,by+ny*.92); ctx.lineTo(bx-nx*.92,by-ny*.92); ctx.stroke();
+  }
+
+  // Pipe (runs along one wall)
+  ctx.strokeStyle='#5a4018'; ctx.lineWidth=scl(7);
+  ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(p1.sx+nx*.78,p1.sy+ny*.78); ctx.lineTo(p2.sx+nx*.78,p2.sy+ny*.78); ctx.stroke();
+  ctx.strokeStyle='#3a2808'; ctx.lineWidth=scl(4);
+  ctx.beginPath(); ctx.moveTo(p1.sx+nx*.78,p1.sy+ny*.78); ctx.lineTo(p2.sx+nx*.78,p2.sy+ny*.78); ctx.stroke();
+  // Pipe highlight
+  ctx.strokeStyle='rgba(120,90,40,.3)'; ctx.lineWidth=scl(1.5);
+  ctx.beginPath(); ctx.moveTo(p1.sx+nx*.72,p1.sy+ny*.72); ctx.lineTo(p2.sx+nx*.72,p2.sy+ny*.72); ctx.stroke();
+  ctx.lineCap='butt';
+
+  // Glow bleed from rooms
+  const tg=ctx.createLinearGradient(p1.sx,p1.sy,p2.sx,p2.sy);
+  tg.addColorStop(0,rgba(r1.accentColor,.05));
+  tg.addColorStop(.5,'transparent');
+  tg.addColorStop(1,rgba(r2.accentColor,.05));
+  ctx.fillStyle=tg;
+  ctx.beginPath();
+  ctx.moveTo(p1.sx+nx*.85,p1.sy+ny*.85); ctx.lineTo(p2.sx+nx*.85,p2.sy+ny*.85);
+  ctx.lineTo(p2.sx-nx*.85,p2.sy-ny*.85); ctx.lineTo(p1.sx-nx*.85,p1.sy-ny*.85);
+  ctx.closePath(); ctx.fill();
+}
+
+// ── Draw room ─────────────────────────────────────────────────────
+function drawRoom(room,t){
+  const {sx:cx,sy:cy}=ws(room.cx,room.cy);
+  const r=scl(room.r);
+
+  // Walls (brick ring)
+  drawBricks(cx,cy,r,room.wallColor,t);
+
+  // Floor inside
+  drawFloor(cx,cy,r*.94,room.floorColor,room.accentColor);
+
+  // Furniture
+  drawFurniture(room,cx,cy,r,t);
+
+  // Room edge wall shadow
+  const edgeShadow=ctx.createRadialGradient(cx,cy,r*.72,cx,cy,r);
+  edgeShadow.addColorStop(0,'transparent');
+  edgeShadow.addColorStop(1,'rgba(0,0,0,.6)');
+  ctx.fillStyle=edgeShadow;
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+
+  // Accent rim glow
+  ctx.beginPath(); ctx.arc(cx,cy,r*.96,0,Math.PI*2);
+  ctx.strokeStyle=rgba(room.accentColor,.2); ctx.lineWidth=scl(3); ctx.stroke();
+
+  // Room label
+  if(r>50){
+    ctx.save();
+    ctx.font=`bold ${scl(11)}px 'Orbitron',monospace`;
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillStyle=rgba(room.accentColor,.45);
+    ctx.fillText(room.label,cx,cy-r+scl(12));
+    ctx.restore();
+  }
+}
+
+// ── Turtles ───────────────────────────────────────────────────────
+const turtles=ROOMS.filter(r=>r.bandana).map(room=>({
+  room, x:room.cx+(Math.random()-.5)*50, y:room.cy+(Math.random()-.5)*50,
+  tx:room.cx, ty:room.cy, walkPhase:Math.random()*10,
+  buildPhase:0, state:'idle', idleTimer:Math.random()*80,
+  buildTimer:0, opacity:0, built:0,
 }));
 
-// ── Ambient steam sources ─────────────────────────────────────────
-const steamSources = [
-  { x:0, y:-50, color:'rgba(150,130,80,', timer:0 },
-  { x:-200, y:100, color:'rgba(100,150,200,', timer:30 },
-  { x:200, y:100, color:'rgba(150,100,80,', timer:60 },
-];
+// ── Ambient steam ─────────────────────────────────────────────────
+const steamPts=[{x:0,y:-60,col:'rgba(160,140,90,'},{x:-180,y:80,col:'rgba(80,130,180,'},{x:180,y:80,col:'rgba(130,90,70,'}];
+let steamT=0;
 
-// ── Camera slowly drifts between rooms ───────────────────────────
-let camTarget = 0, camTimer = 0;
-const camSequence = [0, 1, 2, 3, 4, 5]; // hub + 5 rooms
+// ── Camera sequence ───────────────────────────────────────────────
+let camIdx=0, camTimer=0;
+const camSeq=[0,1,2,3,4,5];
 
-// ── Helpers ───────────────────────────────────────────────────────
-function hexToRgb(hex){
-  const n=parseInt(hex.replace('#',''),16);
-  return `${(n>>16)&255},${(n>>8)&255},${n&255}`;
-}
-function shadeColor(hex, p){
-  const n=parseInt(hex.replace('#',''),16);
-  const r=Math.max(0,Math.min(255,((n>>16)&255)+p));
-  const g=Math.max(0,Math.min(255,((n>>8)&255)+p));
-  const b=Math.max(0,Math.min(255,(n&255)+p));
-  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
-}
-function lighten(hex, p){ return shadeColor(hex, p); }
-
-// Feed
-function addLog(room, msg){
-  const feed = document.getElementById('feed');
-  const el = document.createElement('div'); el.className='log';
-  el.style.borderLeftColor = room.bandana;
-  el.innerHTML = `<span class="who" style="color:${room.bandana}">${room.name}</span>${msg}`;
+// ── Feed ─────────────────────────────────────────────────────────
+function addLog(room,msg){
+  const feed=document.getElementById('feed');
+  const el=document.createElement('div'); el.className='log';
+  el.style.borderLeftColor=room.bandana;
+  el.innerHTML=`<span class="who" style="color:${room.bandana}">${room.name}</span>${msg}`;
   feed.prepend(el);
   while(feed.children.length>3) feed.removeChild(feed.lastChild);
 }
@@ -511,125 +867,112 @@ function addLog(room, msg){
 // ── Main loop ─────────────────────────────────────────────────────
 let frame=0, lastT=0;
 
+// Pre-compute floor crack seeds
+const crackSeeds=ROOMS.map(()=>Array.from({length:5},()=>({a:Math.random()*Math.PI*2,r:Math.random(),ox1:(Math.random()-.5)*40,oy1:(Math.random()-.5)*40,ox2:(Math.random()-.5)*40,oy2:(Math.random()-.5)*40})));
+const puddleSeeds=ROOMS.map(()=>Array.from({length:3},()=>({ox:(Math.random()-.5),oy:(Math.random()-.5),r:8+Math.random()*18,rot:Math.random()*Math.PI})));
+
 function loop(ts){
   requestAnimationFrame(loop);
-  const dt = Math.min((ts-lastT)/16.67, 3); lastT=ts; frame++;
+  const dt=Math.min((ts-lastT)/16.67,3); lastT=ts; frame++;
 
-  // Camera drift
-  camTimer += dt;
-  if(camTimer > 280){
-    camTarget = (camTarget+1)%camSequence.length;
-    camTimer = 0;
-  }
-  const tr = ROOMS[camSequence[camTarget]];
-  const tzoom = camTarget===0 ? 0.58 : 0.82;
-  cam.tx = tr.cx; cam.ty = tr.cy; cam.tz = tzoom;
-  cam.x += (cam.tx - cam.x) * 0.018 * dt;
-  cam.y += (cam.ty - cam.y) * 0.018 * dt;
-  cam.zoom += (cam.tz - cam.zoom) * 0.018 * dt;
+  // Camera
+  camTimer+=dt;
+  if(camTimer>300){ camIdx=(camIdx+1)%camSeq.length; camTimer=0; }
+  const tr=ROOMS[camSeq[camIdx]];
+  const tz=camIdx===0?.58:.85;
+  cam.tx=tr.cx; cam.ty=tr.cy; cam.tz=tz;
+  cam.x+=(cam.tx-cam.x)*.016*dt;
+  cam.y+=(cam.ty-cam.y)*.016*dt;
+  cam.zoom+=(cam.tz-cam.zoom)*.016*dt;
+  document.getElementById('cam-label').textContent=tr.label;
 
-  // Steam
-  steamSources.forEach(ss=>{
-    ss.timer += dt;
-    if(ss.timer > 18){ spawnSteam(ss.x, ss.y, ss.color); ss.timer=0; }
-  });
-  // Random drips from pipes
-  if(frame%45===0) spawnDrip(
-    ROOMS[Math.floor(Math.random()*ROOMS.length)].cx + (Math.random()-.5)*100,
-    ROOMS[Math.floor(Math.random()*ROOMS.length)].cy - 60
-  );
+  // Steam & drips
+  steamT+=dt;
+  if(steamT>15){ steamPts.forEach(s=>steam(s.x,s.y,s.col,3)); steamT=0; }
+  if(frame%50===0) drip(ROOMS[Math.floor(Math.random()*ROOMS.length)].cx+(Math.random()-.5)*120,ROOMS[Math.floor(Math.random()*ROOMS.length)].cy-70);
 
-  // Update particles
-  for(let i=particles.length-1;i>=0;i--){
-    const p=particles[i];
-    p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=p.decay*dt;
-    if(p.type==='steam') p.r+=0.08*dt;
-    if(p.life<=0) particles.splice(i,1);
+  // Particles
+  for(let i=parts.length-1;i>=0;i--){
+    const p=parts[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=p.decay*dt;
+    if(p.type==='steam') p.r+=0.06*dt;
+    if(p.life<=0) parts.splice(i,1);
   }
 
-  // Update turtles
+  // Turtles
   turtles.forEach(t=>{
-    if(t.opacity<1) t.opacity=Math.min(1,t.opacity+0.012*dt);
+    if(t.opacity<1) t.opacity=Math.min(1,t.opacity+.01*dt);
     if(t.state==='idle'){
       if((t.idleTimer-=dt)<=0){
-        // Choose new spot in room
-        const a=Math.random()*Math.PI*2, r=Math.random()*t.room.r*.6;
+        const a=Math.random()*Math.PI*2, r=Math.random()*t.room.r*.62;
         t.tx=t.room.cx+Math.cos(a)*r; t.ty=t.room.cy+Math.sin(a)*r;
         t.state='walk';
       }
     } else if(t.state==='walk'){
       const dx=t.tx-t.x, dy=t.ty-t.y, d=Math.sqrt(dx*dx+dy*dy);
-      if(d<4){ t.x=t.tx; t.y=t.ty; t.state=Math.random()<.5?'build':'idle'; t.idleTimer=60+Math.random()*100; t.buildTimer=80+Math.random()*100; }
-      else { t.x+=dx/d*1.8*dt; t.y+=dy/d*1.8*dt; t.walkPhase+=dt*.18; }
-    } else if(t.state==='build'){
-      t.buildPhase+=dt; t.walkPhase+=dt*.08;
+      if(d<4){ t.x=t.tx; t.y=t.ty; t.state=Math.random()<.5?'build':'idle'; t.idleTimer=70+Math.random()*90; t.buildTimer=80+Math.random()*100; }
+      else { t.x+=dx/d*1.6*dt; t.y+=dy/d*1.6*dt; t.walkPhase+=dt*.16; }
+    } else {
+      t.buildPhase+=dt; t.walkPhase+=dt*.05;
       if((t.buildTimer-=dt)<=0){
         t.state='idle'; t.idleTimer=40; t.buildPhase=0; t.built++;
-        spawnSpark(t.x, t.y, t.room.bandana);
-        const tasks=t.room.tasks;
-        addLog(t.room, tasks[Math.floor(Math.random()*tasks.length)]);
+        spark(t.x,t.y,t.room.bandana);
+        addLog(t.room,t.room.tasks[Math.floor(Math.random()*t.room.tasks.length)]);
       }
     }
   });
 
-  // ── DRAW ─────────────────────────────────────────────────────
+  // ── DRAW ─────────────────────────────────────────────────────────
   ctx.clearRect(0,0,W,H);
-  ctx.fillStyle='#050302'; ctx.fillRect(0,0,W,H);
 
-  // Deep background dirt
+  // Background — deep dark stone
   const bg=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.max(W,H)*.7);
-  bg.addColorStop(0,'#0d0a06'); bg.addColorStop(1,'#020100');
+  bg.addColorStop(0,'#0e0a06'); bg.addColorStop(1,'#030201');
   ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
 
-  // Draw tunnels first (behind rooms)
+  // Tunnels behind rooms
   TUNNELS.forEach(t=>drawTunnel(t));
 
-  // Draw rooms
-  ROOMS.forEach(r=>drawRoom(r, frame));
+  // Rooms
+  ROOMS.forEach(r=>drawRoom(r,frame));
 
-  // Draw particles
-  particles.forEach(p=>{
+  // Particles
+  parts.forEach(p=>{
     const {sx,sy}=ws(p.x,p.y);
-    ctx.globalAlpha=p.life*(p.type==='steam'?.25:.9);
+    ctx.globalAlpha=Math.max(0,p.life);
     if(p.type==='steam'){
       const sg=ctx.createRadialGradient(sx,sy,0,sx,sy,scl(p.r));
-      sg.addColorStop(0, p.color+'0.15)'); sg.addColorStop(1,p.color+'0)');
+      sg.addColorStop(0,p.col+'.12)'); sg.addColorStop(1,p.col+'0)');
       ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(sx,sy,scl(p.r),0,Math.PI*2); ctx.fill();
     } else if(p.type==='drip'){
-      ctx.fillStyle=p.color;
-      ctx.beginPath(); ctx.ellipse(sx,sy,scl(1.5),scl(2.5),0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#1a3a5a';
+      ctx.beginPath(); ctx.ellipse(sx,sy,scl(1.2),scl(2.2),0,0,Math.PI*2); ctx.fill();
     } else {
-      ctx.fillStyle=p.color; ctx.shadowColor=p.color; ctx.shadowBlur=scl(4);
+      ctx.fillStyle=p.col; ctx.shadowColor=p.col; ctx.shadowBlur=scl(5);
       ctx.beginPath(); ctx.arc(sx,sy,scl(p.r),0,Math.PI*2); ctx.fill();
       ctx.shadowBlur=0;
     }
     ctx.globalAlpha=1;
   });
 
-  // Draw turtles
-  turtles.forEach(t=>drawTurtle(t.x, t.y, t.room, t.walkPhase, t.buildPhase, t.opacity, t.state==='build'));
+  // Turtles (depth sort)
+  turtles.slice().sort((a,b)=>a.y-b.y).forEach(t=>drawTurtle(t.x,t.y,t.room,t.walkPhase,t.buildPhase,t.opacity,t.state==='build'));
 
-  // Vignette
-  const vig=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.2,W/2,H/2,Math.max(W,H)*.8);
-  vig.addColorStop(0,'transparent'); vig.addColorStop(1,'rgba(0,0,0,0.75)');
+  // Cinematic vignette
+  const vig=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.18,W/2,H/2,Math.max(W,H)*.85);
+  vig.addColorStop(0,'transparent'); vig.addColorStop(1,'rgba(0,0,0,.82)');
   ctx.fillStyle=vig; ctx.fillRect(0,0,W,H);
 
-  // Film grain (subtle)
-  if(frame%2===0){
-    ctx.globalAlpha=0.022;
-    for(let i=0;i<400;i++){
+  // Subtle film grain
+  if(frame%3===0){
+    ctx.globalAlpha=.018;
+    for(let i=0;i<350;i++){
       ctx.fillStyle=Math.random()>.5?'#fff':'#000';
-      ctx.fillRect(Math.random()*W, Math.random()*H, 1.5, 1.5);
+      ctx.fillRect(Math.random()*W,Math.random()*H,1.5,1.5);
     }
     ctx.globalAlpha=1;
   }
-
-  // Room label overlay
-  const rl=document.getElementById('room-label');
-  if(camTarget>0) rl.textContent=ROOMS[camSequence[camTarget]].label;
-  else rl.textContent='THE SEWER LAIR';
 }
 
-addLog(ROOMS.find(r=>r.key==='splinter'), 'Entering the lair...');
+addLog(ROOMS.find(r=>r.key==='splinter'),'Entering the lair...');
 requestAnimationFrame(loop);
 </script>
