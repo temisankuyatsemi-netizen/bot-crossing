@@ -1,43 +1,41 @@
 <title>Bot Crossing</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=VT323&display=swap">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <style>
-  :root { --bg:#0a0e08; --eye:#00e5ff; --gold:#ffd54f; color-scheme:dark; }
+  :root { --bg:#060d04; color-scheme:dark; }
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{width:100%;height:100%;background:var(--bg);overflow:hidden;font-family:'VT323',monospace}
-  #three-canvas{position:fixed;inset:0;width:100%!important;height:100%!important}
-  #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+  html,body{width:100%;height:100%;background:var(--bg);overflow:hidden}
+  #c{position:fixed;inset:0;width:100%;height:100%}
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10;font-family:'VT323',monospace}
   #topbar{
     position:absolute;top:max(14px,env(safe-area-inset-top,0px));
     left:max(14px,env(safe-area-inset-left,0px));right:max(14px,env(safe-area-inset-right,0px));
     display:flex;align-items:center;justify-content:space-between;gap:8px}
-  #logo{font-family:'Orbitron',monospace;font-size:clamp(12px,2vw,18px);font-weight:900;letter-spacing:.2em;
-    color:#7fff00;text-shadow:0 0 14px #7fff0088,0 0 30px #7fff0033}
-  #clock{font-family:'Orbitron',monospace;font-size:clamp(10px,1.4vw,13px);color:var(--gold);
+  #logo{font-family:'Orbitron',monospace;font-size:clamp(12px,2vw,18px);font-weight:900;
+    letter-spacing:.2em;color:#7fff00;text-shadow:0 0 14px #7fff0088}
+  #clock{font-family:'Orbitron',monospace;font-size:clamp(10px,1.4vw,13px);color:#ffd54f;
     letter-spacing:.12em;background:rgba(0,0,0,.6);padding:3px 10px;
-    border:1px solid rgba(255,213,79,.3);border-radius:4px;backdrop-filter:blur(4px)}
-  #pills{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
-  .pill{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:.08em;padding:3px 9px;
-    border-radius:4px;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);white-space:nowrap}
-  #legend{position:absolute;left:max(14px,env(safe-area-inset-left,0px));top:50%;transform:translateY(-50%);
-    display:flex;flex-direction:column;gap:4px}
-  .leg{display:flex;align-items:center;gap:6px;font-size:14px;letter-spacing:.04em;
-    color:#4a6040;background:rgba(0,0,0,.55);padding:3px 8px 3px 5px;
-    border-radius:3px;backdrop-filter:blur(4px)}
-  .leg-dot{width:7px;height:7px;flex-shrink:0;border-radius:2px}
-  #feed{position:absolute;bottom:max(18px,env(safe-area-inset-bottom,0px));
+    border:1px solid rgba(255,213,79,.3);border-radius:4px}
+  #pills{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .pill{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:.06em;padding:3px 8px;
+    border-radius:3px;background:rgba(0,0,0,.6);white-space:nowrap}
+  #legend{position:absolute;left:max(14px,env(safe-area-inset-left,0px));
+    top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:4px}
+  .leg{display:flex;align-items:center;gap:6px;font-size:14px;color:#3a5030;
+    background:rgba(0,0,0,.55);padding:3px 8px 3px 5px;border-radius:3px}
+  .leg-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+  #feed{position:absolute;bottom:max(16px,env(safe-area-inset-bottom,0px));
     left:max(14px,env(safe-area-inset-left,0px));right:max(14px,env(safe-area-inset-right,0px));
     display:flex;flex-direction:column;gap:4px;max-height:100px;overflow:hidden}
-  .log{font-size:15px;color:#405840;padding:3px 10px;background:rgba(0,10,0,.8);
-    border-left:2px solid #1a4a10;border-radius:0 3px 3px 0;backdrop-filter:blur(4px);
+  .log{font-size:15px;color:#405840;padding:3px 10px;background:rgba(0,8,0,.85);
+    border-left:2px solid #1a4a10;border-radius:0 3px 3px 0;
     animation:sl .3s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .log .who{font-weight:600;margin-right:6px}
   @keyframes sl{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 </style>
 
+<canvas id="c"></canvas>
 <div id="hud">
   <div id="topbar">
     <div id="logo">BOT CROSSING</div>
@@ -53,548 +51,519 @@
 </div>
 
 <script>
-// ── Clock ─────────────────────────────────────────────────────────
-function tickClock(){
-  const d=new Date();
-  document.getElementById('clock').textContent=
-    String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');
-}
-tickClock(); setInterval(tickClock,1000);
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, OX, OY;
 
-// ── Sectors — each gets a turtle bandana color ────────────────────
-const SECTORS=[
-  {key:'content',  label:'CONTENT HUB',        bandana:0x1565c0, hex:'#1e90ff', bandName:'LEONARDO',
-   angle:-Math.PI/2,            color:0x1e90ff,
-   tasks:['Post AM workout reel','Film healthy meal','Paint timelapse','Cheat day haul','Athlete morning','Cook-along video','Sketch session','Recovery prep']},
-  {key:'stocked',  label:'STOCKED',             bandana:0x6a0dad, hex:'#9c27b0', bandName:'DONATELLO',
-   angle:-Math.PI/2+(2*Math.PI/5), color:0x9c27b0,
-   tasks:['Prototype v2 spec','User research','Pitch deck slide','App wireframe','Backend schema','Supplier outreach','Press kit draft','Demo video']},
-  {key:'athletic', label:'ATHLETIC WEAR',       bandana:0xb71c1c, hex:'#f44336', bandName:'RAPHAEL',
-   angle:-Math.PI/2+2*(2*Math.PI/5), color:0xf44336,
-   tasks:['Design drop concept','Sample request','Launch campaign','Fit model shoot','Brand guide','Collab pitch','Website landing','Size run plan']},
-  {key:'creative', label:'CREATIVE COLLECTIVE', bandana:0xe65100, hex:'#ff9800', bandName:'MICHELANGELO',
-   angle:-Math.PI/2+3*(2*Math.PI/5), color:0xff9800,
-   tasks:['Gallery concept','Merch design','Zine layout','Exhibition pitch','Community event','Digital drop','Collab artist DM','Editorial shoot']},
-  {key:'hq',       label:'HQ / OPS',            bandana:0x1b5e20, hex:'#4caf50', bandName:'SPLINTER',
-   angle:-Math.PI/2+4*(2*Math.PI/5), color:0x4caf50,
-   tasks:['Sprint planning','OKR review','Budget model','Roadmap update','Team stand-up','Metrics dashboard','Risk log','Weekly recap']},
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  OX = W / 2;
+  OY = H * 0.42;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── Clock ─────────────────────────────────────────────────────────
+function tickClock() {
+  const d = new Date();
+  document.getElementById('clock').textContent =
+    String(d.getHours()).padStart(2,'0') + ':' +
+    String(d.getMinutes()).padStart(2,'0') + ':' +
+    String(d.getSeconds()).padStart(2,'0');
+}
+tickClock(); setInterval(tickClock, 1000);
+
+// ── Isometric projection ─────────────────────────────────────────
+const ISO_SCALE = Math.min(W, H) * 0.045;
+function iso(x, y, z) {
+  const s = ISO_SCALE;
+  return {
+    sx: OX + (x - y) * s,
+    sy: OY + (x + y) * s * 0.5 - z * s * 0.85
+  };
+}
+
+// ── Sectors ───────────────────────────────────────────────────────
+const SECTORS = [
+  { key:'content',  label:'CONTENT HUB',        bandName:'LEONARDO',   bandana:'#1e90ff', angle: 0,
+    tasks:['Post AM workout reel','Film healthy meal','Paint timelapse','Cheat day haul','Morning routine','Cook-along video','Sketch session','Recovery prep'] },
+  { key:'stocked',  label:'STOCKED',             bandName:'DONATELLO',  bandana:'#b040ff', angle: Math.PI*2/5,
+    tasks:['Prototype v2 spec','User research','Pitch deck slide','App wireframe','Backend schema','Supplier outreach','Press kit draft','Demo video'] },
+  { key:'athletic', label:'ATHLETIC WEAR',       bandName:'RAPHAEL',    bandana:'#f44336', angle: Math.PI*4/5,
+    tasks:['Design drop concept','Sample request','Launch campaign','Fit model shoot','Brand guide','Collab pitch','Website landing','Size run plan'] },
+  { key:'creative', label:'CREATIVE COLLECTIVE', bandName:'MICHELANGELO',bandana:'#ff9800', angle: Math.PI*6/5,
+    tasks:['Gallery concept','Merch design','Zine layout','Exhibition pitch','Community event','Digital drop','Collab artist DM','Editorial shoot'] },
+  { key:'hq',       label:'HQ / OPS',            bandName:'SPLINTER',   bandana:'#4caf50', angle: Math.PI*8/5,
+    tasks:['Sprint planning','OKR review','Budget model','Roadmap update','Team stand-up','Metrics dashboard','Risk log','Weekly recap'] },
 ];
 
-const legendEl=document.getElementById('legend');
-SECTORS.forEach(s=>{
-  const el=document.createElement('div'); el.className='leg';
-  el.innerHTML=`<div class="leg-dot" style="background:${s.hex}"></div>${s.bandName} · ${s.label}`;
+// Legend
+const legendEl = document.getElementById('legend');
+SECTORS.forEach(s => {
+  const el = document.createElement('div'); el.className = 'leg';
+  el.innerHTML = `<div class="leg-dot" style="background:${s.bandana}"></div>${s.bandName} · ${s.label}`;
   legendEl.appendChild(el);
 });
 
-// ── Three.js ──────────────────────────────────────────────────────
-const scene=new THREE.Scene();
-scene.background=new THREE.Color(0x030806);
-scene.fog=new THREE.FogExp2(0x030806,0.055);
+// ── World state ───────────────────────────────────────────────────
+let worldRadius = 0, worldTarget = 3, worldMax = 11;
+const grassBlocks = []; // { gx, gy, color }
+const structures = []; // { gx, gy, sector, scale, targetScale, age }
+const particles = []; // { x, y, z, vx, vy, vz, life, color }
+const bots = [];
 
-const renderer=new THREE.WebGLRenderer({antialias:true});
-renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
-renderer.setSize(window.innerWidth,window.innerHeight);
-renderer.shadowMap.enabled=true;
-renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.0;
-renderer.domElement.id='three-canvas';
-document.body.insertBefore(renderer.domElement,document.getElementById('hud'));
-
-const camera=new THREE.PerspectiveCamera(50,window.innerWidth/window.innerHeight,.1,200);
-camera.position.set(0,14,10); camera.lookAt(0,0,0);
-
-window.addEventListener('resize',()=>{
-  camera.aspect=window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth,window.innerHeight);
-});
-
-// Lights
-scene.add(new THREE.AmbientLight(0x102008,3.5));
-const sun=new THREE.DirectionalLight(0x80ff40,1.8);
-sun.position.set(6,14,8); sun.castShadow=true;
-sun.shadow.mapSize.set(2048,2048);
-sun.shadow.camera.near=.5; sun.shadow.camera.far=60;
-sun.shadow.camera.left=sun.shadow.camera.bottom=-15;
-sun.shadow.camera.right=sun.shadow.camera.top=15;
-scene.add(sun);
-scene.add(Object.assign(new THREE.DirectionalLight(0x004020,.5),{position:new THREE.Vector3(-8,5,-5)}));
-const coreLight=new THREE.PointLight(0x40ff40,4,10);
-coreLight.position.set(0,.8,0); scene.add(coreLight);
-
-// Stars
-const sverts=[];
-for(let i=0;i<1600;i++){
-  const t=Math.random()*Math.PI*2,p=Math.acos(2*Math.random()-1),r=65+Math.random()*35;
-  sverts.push(Math.sin(p)*Math.cos(t)*r,Math.sin(p)*Math.sin(t)*r,Math.cos(p)*r);
-}
-const sg=new THREE.BufferGeometry();
-sg.setAttribute('position',new THREE.Float32BufferAttribute(sverts,3));
-scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0x80c880,size:.15})));
-
-// ── World ─────────────────────────────────────────────────────────
-let worldRadius=0, worldTarget=3.5, worldMax=10;
-const BLOCK_SIZE=1;
-
-// Voxel world — store placed blocks
-const blockMap=new Map();
-
-// Ground plane (dark)
-const groundGeo=new THREE.BoxGeometry(worldMax*2+2,.3,worldMax*2+2);
-const groundMat=new THREE.MeshLambertMaterial({color:0x0a1808});
-const groundMesh=new THREE.Mesh(groundGeo,groundMat);
-groundMesh.receiveShadow=true; groundMesh.position.y=-.15;
-scene.add(groundMesh);
-
-// Grass blocks on ground (placed dynamically as world grows)
-const grassPool=[];
-function ensureGrassBlocks(){
-  const r=Math.floor(worldRadius);
-  for(let x=-r;x<=r;x++){
-    for(let z=-r;z<=r;z++){
-      if(x*x+z*z>worldRadius*worldRadius) continue;
-      const k=`${x},${z}`;
-      if(blockMap.has(k)) continue;
-      const geo=new THREE.BoxGeometry(BLOCK_SIZE,.32,BLOCK_SIZE);
-      // grass color varies slightly per block
-      const hue=0.3+Math.random()*.05;
-      const bright=.16+Math.random()*.06;
-      const col=new THREE.Color().setHSL(hue,0.65,bright);
-      const mat=new THREE.MeshLambertMaterial({color:col});
-      const mesh=new THREE.Mesh(geo,mat);
-      mesh.castShadow=false; mesh.receiveShadow=true;
-      mesh.position.set(x+Math.random()*.0,0,z+Math.random()*.0);
-      scene.add(mesh); blockMap.set(k,mesh);
+// ── Grass block grid ──────────────────────────────────────────────
+const grassSet = new Set();
+function ensureGrass() {
+  const r = Math.ceil(worldRadius);
+  for (let gx = -r; gx <= r; gx++) {
+    for (let gy = -r; gy <= r; gy++) {
+      if (gx*gx + gy*gy > worldRadius * worldRadius) continue;
+      const k = `${gx},${gy}`;
+      if (grassSet.has(k)) continue;
+      grassSet.add(k);
+      const hue = 110 + Math.random() * 20;
+      const light = 12 + Math.random() * 7;
+      grassBlocks.push({ gx, gy, color: `hsl(${hue},60%,${light}%)`, h: 0.28 + Math.random() * 0.08 });
     }
   }
 }
 
-// Edge ring
-const ringGeo=new THREE.TorusGeometry(1,.07,8,128);
-const ringMat=new THREE.MeshBasicMaterial({color:0x40ff40,transparent:true,opacity:.7});
-const ring=new THREE.Mesh(ringGeo,ringMat);
-ring.rotation.x=-Math.PI/2; ring.position.y=.18; scene.add(ring);
+// ── Draw isometric cube ───────────────────────────────────────────
+function drawCube(gx, gy, gz, w, d, h, topColor, leftColor, rightColor, alpha=1) {
+  const x = gx, y = gy, z = gz;
+  const p = (xx, yy, zz) => iso(x + xx, y + yy, z + zz);
 
-// Center core block (Minecraft beacon style)
-const beaconGeo=new THREE.BoxGeometry(.6,.6,.6);
-const beaconMat=new THREE.MeshBasicMaterial({color:0x40ff80,transparent:true,opacity:.85});
-const beaconMesh=new THREE.Mesh(beaconGeo,beaconMat);
-beaconMesh.position.y=.5; scene.add(beaconMesh);
+  const tl = p(0,0,h), tr = p(w,0,h), br = p(w,d,h), bl = p(0,d,h);
+  const fl = p(0,0,0), fr = p(w,0,0);
+  const rl = p(0,d,0);
 
-// Beacon beam
-const beamGeo=new THREE.CylinderGeometry(.08,.08,50,8);
-const beamMat=new THREE.MeshBasicMaterial({color:0x40ff40,transparent:true,opacity:.12});
-const beamMesh=new THREE.Mesh(beamGeo,beamMat);
-beamMesh.position.set(0,25,.0); scene.add(beamMesh);
+  ctx.globalAlpha = alpha;
 
-// ── NINJA TURTLE bot — Minecraft-voxel style ──────────────────────
-// All geometry is BoxGeometry (no curves, true voxel)
-function buildTurtleBot(sector,isManager){
-  const g=new THREE.Group();
-  const skinColor=isManager?0x2d5a1b:0x3a7a20; // green skin
-  const shellColor=0x4a3a10; // dark brown shell
-  const shellHighlight=0x6a5520;
-  const bandColor=sector.bandana;
-  const eyeWhite=0xeeeeff;
-  const eyePupil=0x111122;
-  const bandTailColor=bandColor;
+  // Top face
+  ctx.fillStyle = topColor;
+  ctx.beginPath();
+  ctx.moveTo(tl.sx,tl.sy); ctx.lineTo(tr.sx,tr.sy);
+  ctx.lineTo(br.sx,br.sy); ctx.lineTo(bl.sx,bl.sy);
+  ctx.closePath(); ctx.fill();
 
-  function box(w,h,d,col,emissive=null,emInt=0){
-    const geo=new THREE.BoxGeometry(w,h,d);
-    const mat=new THREE.MeshLambertMaterial({color:col});
-    if(emissive!==null){mat.emissive=new THREE.Color(emissive);mat.emissiveIntensity=emInt;}
-    const m=new THREE.Mesh(geo,mat);
-    m.castShadow=true; m.receiveShadow=true; return m;
-  }
+  // Left face
+  ctx.fillStyle = leftColor;
+  ctx.beginPath();
+  ctx.moveTo(tl.sx,tl.sy); ctx.lineTo(bl.sx,bl.sy);
+  ctx.lineTo(rl.sx,rl.sy); ctx.lineTo(fl.sx,fl.sy);
+  ctx.closePath(); ctx.fill();
 
-  // LEGS (2 blocks)
-  const legL=box(.28,.55,.28,skinColor); legL.position.set(-.17,-.55,0); g.add(legL);
-  const legR=box(.28,.55,.28,skinColor); legR.position.set(.17,-.55,0); g.add(legR);
+  // Right face
+  ctx.fillStyle = rightColor;
+  ctx.beginPath();
+  ctx.moveTo(tr.sx,tr.sy); ctx.lineTo(br.sx,br.sy);
+  ctx.lineTo(rl.sx,rl.sy); ctx.lineTo(fr.sx,fr.sy);
+  ctx.closePath(); ctx.fill();
+
+  ctx.globalAlpha = 1;
+}
+
+// ── Draw Ninja Turtle bot (isometric voxel) ───────────────────────
+function drawTurtle(gx, gy, bandana, isManager, facing, walkPhase, buildPhase, scale, alpha) {
+  if (alpha <= 0) return;
+  const bx = gx, by = gy;
+  const sc = scale;
+  ctx.globalAlpha = alpha;
+
+  // Color palette
+  const skin    = '#3a7a20';
+  const skinDk  = '#2a5a14';
+  const skinDk2 = '#1e4010';
+  const shell   = '#4a3a10';
+  const shellDk = '#2e2408';
+  const shellLt = '#6a5520';
+  const bDk     = shadeColor(bandana, -40);
+  const bLt     = bandana;
+  const white   = '#ddeedd';
+  const black   = '#112211';
+
+  const lw = buildPhase > 0 ? 0 : Math.sin(walkPhase) * 0.12 * sc;
+  const rw = buildPhase > 0 ? 0 : -Math.sin(walkPhase) * 0.12 * sc;
+  const bob = buildPhase > 0 ? 0 : Math.abs(Math.sin(walkPhase)) * 0.04 * sc;
+  const bld = buildPhase > 0 ? Math.sin(buildPhase * 0.15) * 0.08 * sc : 0;
+
+  const bz = bob;
+  const s = sc;
+
+  // LEGS
+  drawCube(bx - 0.18*s, by - 0.06*s, bz + lw, 0.22*s, 0.22*s, 0.45*s, skin, skinDk, skinDk2);
+  drawCube(bx + 0.04*s, by - 0.06*s, bz + rw, 0.22*s, 0.22*s, 0.45*s, skin, skinDk, skinDk2);
 
   // FEET
-  const footL=box(.3,.14,.38,0x2a5010); footL.position.set(-.17,-.86,.05); g.add(footL);
-  const footR=box(.3,.14,.38,0x2a5010); footR.position.set(.17,-.86,.05); g.add(footR);
+  drawCube(bx - 0.2*s,  by - 0.1*s,  bz + lw - 0.02*s, 0.28*s, 0.32*s, 0.1*s, '#2a5010', '#1e3a08', '#1a3006');
+  drawCube(bx + 0.02*s, by - 0.1*s,  bz + rw - 0.02*s, 0.28*s, 0.32*s, 0.1*s, '#2a5010', '#1e3a08', '#1a3006');
 
-  // TORSO (wider — turtle body)
-  const torsoW=isManager?.78:.7;
-  const torso=box(torsoW,.62,.44,skinColor); torso.position.set(0,.0,0); g.add(torso);
+  // BELT (bandana color strip)
+  drawCube(bx - 0.22*s, by - 0.14*s, bz + 0.44*s, 0.56*s, 0.38*s, 0.1*s, bDk, shadeColor(bDk,-20), shadeColor(bDk,-30));
 
-  // SHELL on back (flat slab + segments)
-  const shell=box(torsoW-.06,.56,.18,shellColor); shell.position.set(0,.02,-.26); g.add(shell);
-  // shell segment lines (boxes on top of shell)
-  for(let sy=0;sy<2;sy++) for(let sx=0;sx<2;sx++){
-    const seg=box(.26,.22,.04,shellHighlight);
-    seg.position.set((sx-.5)*.24+.06,(sy-.5)*.22,-.33); g.add(seg);
-  }
-  // shell rim
-  const shellRim=box(torsoW+.04,.6,.06,0x5a4a18); shellRim.position.set(0,.02,-.18); g.add(shellRim);
+  // BODY
+  drawCube(bx - 0.22*s, by - 0.12*s, bz + 0.53*s, 0.56*s, 0.36*s, 0.52*s, skin, skinDk, skinDk2);
 
-  // BELT / wrapping (colored strip at waist)
-  const belt=box(torsoW+.02,.1,.48,bandColor); belt.position.set(0,-.08,-.02); g.add(belt);
+  // SHELL (back)
+  drawCube(bx - 0.2*s, by + 0.14*s, bz + 0.55*s, 0.5*s, 0.14*s, 0.44*s, shell, shellDk, shellDk);
+  // shell highlights (segments)
+  drawCube(bx - 0.18*s, by + 0.19*s, bz + 0.62*s, 0.2*s, 0.06*s, 0.16*s, shellLt, shell, shell);
+  drawCube(bx + 0.06*s, by + 0.19*s, bz + 0.62*s, 0.2*s, 0.06*s, 0.16*s, shellLt, shell, shell);
+  drawCube(bx - 0.18*s, by + 0.19*s, bz + 0.82*s, 0.2*s, 0.06*s, 0.14*s, shellLt, shell, shell);
+  drawCube(bx + 0.06*s, by + 0.19*s, bz + 0.82*s, 0.2*s, 0.06*s, 0.14*s, shellLt, shell, shell);
+
+  // ARMS
+  const armLZ = bld;
+  const armRZ = -bld;
+  drawCube(bx - 0.42*s, by - 0.1*s, bz + 0.56*s + armLZ, 0.2*s, 0.2*s, 0.42*s, skin, skinDk, skinDk2);
+  drawCube(bx + 0.24*s, by - 0.1*s, bz + 0.56*s + armRZ, 0.2*s, 0.2*s, 0.42*s, skin, skinDk, skinDk2);
+  // fists
+  drawCube(bx - 0.44*s, by - 0.12*s, bz + 0.54*s + armLZ + 0.4*s, 0.24*s, 0.24*s, 0.22*s, skin, skinDk, skinDk2);
+  drawCube(bx + 0.22*s, by - 0.12*s, bz + 0.54*s + armRZ + 0.4*s, 0.24*s, 0.24*s, 0.22*s, skin, skinDk, skinDk2);
+
   // knee pads
-  const kneL=box(.32,.16,.32,bandColor); kneL.position.set(-.17,-.3,0); g.add(kneL);
-  const kneR=box(.32,.16,.32,bandColor); kneR.position.set(.17,-.3,0); g.add(kneR);
-
-  // ARMS — turtle arms are chunky
-  const armW=isManager?.24:.22;
-  const armPivotL=new THREE.Group(); armPivotL.position.set(-(torsoW*.5+armW*.5+.02),.15,0);
-  const armMeshL=box(armW,.55,armW,skinColor); armMeshL.position.y=-.2; armPivotL.add(armMeshL);
-  g.add(armPivotL);
-  const armPivotR=new THREE.Group(); armPivotR.position.set(torsoW*.5+armW*.5+.02,.15,0);
-  const armMeshR=box(armW,.55,armW,skinColor); armMeshR.position.y=-.2; armPivotR.add(armMeshR);
-  g.add(armPivotR);
-
-  // Elbow pads
-  const elbL=box(armW+.06,.16,armW+.06,bandColor); elbL.position.set(0,-.1,0); armPivotL.add(elbL);
-  const elbR=box(armW+.06,.16,armW+.06,bandColor); elbR.position.set(0,-.1,0); armPivotR.add(elbR);
-
-  // FISTS (block fists)
-  const fistL=box(.28,.28,.28,skinColor); fistL.position.set(0,-.48,0); armPivotL.add(fistL);
-  const fistR=box(.28,.28,.28,skinColor); fistR.position.set(0,-.48,0); armPivotR.add(fistR);
+  drawCube(bx - 0.2*s,  by - 0.1*s, bz + 0.25*s + lw, 0.26*s, 0.26*s, 0.14*s, bDk, shadeColor(bDk,-20), shadeColor(bDk,-30));
+  drawCube(bx + 0.02*s, by - 0.1*s, bz + 0.25*s + rw, 0.26*s, 0.26*s, 0.14*s, bDk, shadeColor(bDk,-20), shadeColor(bDk,-30));
 
   // NECK
-  const neck=box(.3,.18,.3,skinColor); neck.position.set(0,.4,0); g.add(neck);
+  drawCube(bx - 0.1*s, by - 0.05*s, bz + 1.04*s, 0.22*s, 0.18*s, 0.14*s, skin, skinDk, skinDk2);
 
-  // HEAD — wide square turtle head
-  const headGroup=new THREE.Group(); headGroup.position.set(0,.58,0);
-  const headW=isManager?.68:.62;
-  const headBlock=box(headW,.54,.52,skinColor); headBlock.position.y=.27; headGroup.add(headBlock);
+  // HEAD
+  const headW = isManager ? 0.6*s : 0.54*s;
+  const headOX = isManager ? -0.28*s : -0.25*s;
+  drawCube(bx + headOX, by - 0.16*s, bz + 1.16*s, headW, 0.46*s, 0.48*s, skin, skinDk, skinDk2);
 
-  // BANDANA — colored band across face, tied at back with tails
-  const band=box(headW+.04,.2,.08,bandColor); band.position.set(0,.34,.3); headGroup.add(band);
-  const bandBack=box(.06,.18,.55,bandColor); bandBack.position.set(0,.34,-.02); headGroup.add(bandBack);
-  // bandana knot
-  const knot=box(.14,.14,.1,bandTailColor); knot.position.set(0,.34,-.32); headGroup.add(knot);
-  // bandana tails hanging
-  const tailL=box(.08,.28,.06,bandTailColor); tailL.position.set(-.12,.18,-.3); tailL.rotation.z=.15; headGroup.add(tailL);
-  const tailR=box(.08,.28,.06,bandTailColor); tailR.position.set(.12,.18,-.3); tailR.rotation.z=-.15; headGroup.add(tailR);
+  // BANDANA across face
+  drawCube(bx + headOX - 0.01*s, by - 0.22*s, bz + 1.38*s, headW + 0.02*s, 0.08*s, 0.16*s, bLt, bDk, shadeColor(bDk,-10));
+  // bandana knot at back
+  drawCube(bx + headOX + 0.18*s, by + 0.22*s, bz + 1.4*s, 0.12*s, 0.1*s, 0.1*s, bDk, shadeColor(bDk,-20), shadeColor(bDk,-30));
 
-  // EYES — white square eyes with square pupils
-  const eyeL=box(.18,.16,.06,eyeWhite); eyeL.position.set(-.14,.36,.3); headGroup.add(eyeL);
-  const eyeR=box(.18,.16,.06,eyeWhite); eyeR.position.set(.14,.36,.3); headGroup.add(eyeR);
-  const pupL=box(.09,.09,.06,eyePupil); pupL.position.set(-.14,.36,.33); headGroup.add(pupL);
-  const pupR=box(.09,.09,.06,eyePupil); pupR.position.set(.14,.36,.33); headGroup.add(pupR);
-  // eye glow
-  const eyeGlow=new THREE.PointLight(bandColor,.4,1.5);
-  eyeGlow.position.set(0,.36,.35); headGroup.add(eyeGlow);
+  // EYES (square whites + pupils)
+  drawCube(bx + headOX + 0.06*s, by - 0.22*s, bz + 1.46*s, 0.14*s, 0.04*s, 0.12*s, white, '#aaddaa', '#99cc99');
+  drawCube(bx + headOX + 0.26*s, by - 0.22*s, bz + 1.46*s, 0.14*s, 0.04*s, 0.12*s, white, '#aaddaa', '#99cc99');
+  // pupils
+  drawCube(bx + headOX + 0.1*s,  by - 0.23*s, bz + 1.5*s,  0.07*s, 0.03*s, 0.07*s, bandana, black, black);
+  drawCube(bx + headOX + 0.3*s,  by - 0.23*s, bz + 1.5*s,  0.07*s, 0.03*s, 0.07*s, bandana, black, black);
 
   // NOSE
-  const nose=box(.12,.1,.06,0x2a5010); nose.position.set(0,.26,.31); headGroup.add(nose);
+  drawCube(bx + headOX + 0.2*s, by - 0.2*s, bz + 1.32*s, 0.1*s, 0.04*s, 0.07*s, '#2a5010', skinDk2, skinDk2);
 
-  // MOUTH (line)
-  const mouth=box(.22,.05,.04,0x1a3a08); mouth.position.set(0,.18,.31); headGroup.add(mouth);
-
-  // Manager gets a HEADBAND / crown
-  if(isManager){
-    const crown=box(headW+.06,.14,.54,0xffd700); crown.position.set(0,.56,.01); headGroup.add(crown);
+  // Manager CROWN
+  if (isManager) {
+    drawCube(bx + headOX - 0.02*s, by - 0.17*s, bz + 1.62*s, headW + 0.04*s, 0.46*s, 0.1*s, '#ffd700', '#c8a000', '#a08000');
     // crown points
-    for(let i=0;i<3;i++){
-      const pt=box(.1,.22,.1,0xffcc00); pt.position.set((i-1)*.22,.72,.01); headGroup.add(pt);
+    for (let i = 0; i < 3; i++) {
+      drawCube(bx + headOX + (i * 0.2 + 0.02)*s, by - 0.17*s, bz + 1.71*s, 0.1*s, 0.1*s, 0.16*s, '#ffee44', '#c8a000', '#a08000');
     }
   }
 
-  g.add(headGroup);
-
-  // Weapons slot (manager has staff, others have tools)
-  if(isManager){
-    const staff=box(.06,1.1,.06,0x6a4010); staff.position.set(.5,.1,-.1);
-    const staffTop=box(.18,.18,.18,0xffd700); staffTop.position.set(.5,.68,-.1);
-    g.add(staff); g.add(staffTop);
-  }
-
-  g.userData={legL,legR,armPivotL,armPivotR,headGroup,eyeGlow,belt,isManager};
-  g.scale.setScalar(isManager?0.82:0.58);
-  return g;
+  ctx.globalAlpha = 1;
 }
 
-// ── Minecraft structures ──────────────────────────────────────────
-const structures=[];
-function spawnStructure(x,z,sector){
-  const g=new THREE.Group();
-  function vox(w,h,d,col){
-    const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color:col}));
-    m.castShadow=true; m.receiveShadow=true; return m;
-  }
-  const c=sector.bandana;
+// ── Draw structure ────────────────────────────────────────────────
+function drawStructure(gx, gy, sector, scale) {
+  const s = scale;
+  const c = sector.bandana;
+  const cDk = shadeColor(c, -40);
+  const cDk2 = shadeColor(c, -60);
 
-  switch(sector.key){
-    case 'content': {
+  switch (sector.key) {
+    case 'content':
       // Camera tower
-      const base=vox(.7,.7,.7,0x334444); base.position.y=.35; g.add(base);
-      const tower=vox(.4,.8,.4,0x445555); tower.position.y=1.1; g.add(tower);
-      const lens=vox(.35,.35,.35,c); lens.position.set(0,1.6,.2); g.add(lens);
-      const beam=vox(.06,.06,.5,c); beam.position.set(0,1.6,.5); beam.material.emissive=new THREE.Color(c); beam.material.emissiveIntensity=.4; g.add(beam);
-      break;}
-    case 'stocked': {
+      drawCube(gx-.3*s, gy-.3*s, 0, .6*s,.6*s,.5*s, '#334','#223','#112');
+      drawCube(gx-.2*s, gy-.2*s, .5*s, .4*s,.4*s,.7*s, '#445','#334','#223');
+      drawCube(gx-.25*s,gy-.3*s, 1.1*s,.5*s,.4*s,.35*s, c, cDk, cDk2);
+      break;
+    case 'stocked':
       // Crate stack
-      for(let i=0;i<3;i++){
-        const cr=vox(.7-(i*.05),.55-(i*.03),.7-(i*.05),i===0?0x6a4a18:i===1?0x7a5a22:c);
-        cr.position.y=.28+i*.56; g.add(cr);
-      }
-      break;}
-    case 'athletic': {
+      drawCube(gx-.35*s,gy-.35*s,0,.7*s,.7*s,.5*s,'#6a4a18','#4a3010','#3a2008');
+      drawCube(gx-.28*s,gy-.28*s,.5*s,.56*s,.56*s,.44*s,c,cDk,cDk2);
+      drawCube(gx-.2*s, gy-.2*s, .9*s,.4*s,.4*s,.35*s,c,cDk,cDk2);
+      break;
+    case 'athletic':
       // Podium
-      for(let i=0;i<3;i++){
-        const b=vox(.9-(i*.22),.35,.9-(i*.22),i===0?0x880000:i===1?c:0xcc3333);
-        b.position.y=.18+i*.35; g.add(b);
-      }
-      const star=vox(.22,.22,.22,0xffdd00); star.position.y=1.28; star.material.emissive=new THREE.Color(0xffdd00); star.material.emissiveIntensity=.5; g.add(star);
-      break;}
-    case 'creative': {
-      // Art easel (blocky)
-      const canvas=vox(.65,.55,.06,0xeef0e0); canvas.position.set(0,.7,.05); g.add(canvas);
-      // colored patch on canvas
-      const patch=vox(.4,.3,.06,c); patch.position.set(0,.7,.09); g.add(patch);
-      const leg1=vox(.07,.65,.07,0x6a5020); leg1.position.set(-.2,.28,-.15); leg1.rotation.x=.2; g.add(leg1);
-      const leg2=vox(.07,.65,.07,0x6a5020); leg2.position.set(.2,.28,-.15); leg2.rotation.x=.2; g.add(leg2);
-      break;}
-    case 'hq': {
-      // Command block (minecraft tribute)
-      const cmd=vox(.9,.9,.9,0x6633aa);
-      cmd.material.emissive=new THREE.Color(c); cmd.material.emissiveIntensity=.15;
-      cmd.position.y=.45; g.add(cmd);
-      // X pattern
-      const x1=vox(.72,.12,.12,c); x1.position.y=.45; x1.material.emissive=new THREE.Color(c); x1.material.emissiveIntensity=.4; g.add(x1);
-      const x2=vox(.12,.72,.12,c); x2.position.y=.45; x2.material.emissive=new THREE.Color(c); x2.material.emissiveIntensity=.4; g.add(x2);
-      const antenna=vox(.1,1.1,.1,0x442266); antenna.position.y=1.35; g.add(antenna);
-      const tip=vox(.18,.18,.18,c); tip.position.y=1.97; tip.material.emissive=new THREE.Color(c); tip.material.emissiveIntensity=.6; g.add(tip);
-      break;}
+      drawCube(gx-.4*s, gy-.4*s, 0,.8*s,.8*s,.3*s,'#880000','#550000','#440000');
+      drawCube(gx-.3*s, gy-.3*s,.3*s,.6*s,.6*s,.28*s,c,cDk,cDk2);
+      drawCube(gx-.18*s,gy-.18*s,.58*s,.36*s,.36*s,.24*s,'#cc3333',c,cDk);
+      drawCube(gx-.1*s, gy-.1*s,.82*s,.2*s,.2*s,.2*s,'#ffdd00','#ccaa00','#aa8800');
+      break;
+    case 'creative':
+      // Easel with canvas
+      drawCube(gx-.05*s,gy-.05*s,0,.1*s,.1*s,.9*s,'#6a5020','#4a3810','#3a2808');
+      drawCube(gx-.3*s, gy+.02*s,.4*s,.6*s,.08*s,.5*s,'#eef0e0','#ccd0c0','#aab0a0');
+      drawCube(gx-.25*s,gy+.01*s,.45*s,.5*s,.06*s,.38*s,c,cDk,cDk2);
+      break;
+    case 'hq':
+      // Command block
+      drawCube(gx-.4*s,gy-.4*s,0,.8*s,.8*s,.8*s,'#6633aa','#442280','#332060');
+      drawCube(gx-.38*s,gy-.38*s,.35*s,.76*s,.08*s,.1*s,c,cDk,cDk2);
+      drawCube(gx-.1*s, gy-.38*s,.1*s,.08*s,.08*s,.6*s,c,cDk,cDk2);
+      drawCube(gx-.38*s,gy-.1*s, .1*s,.6*s,.08*s,.08*s,c,cDk,cDk2);
+      drawCube(gx-.05*s,gy-.05*s,.8*s,.1*s,.1*s,.7*s,'#442280','#332060','#221840');
+      drawCube(gx-.12*s,gy-.12*s,1.45*s,.24*s,.24*s,.24*s,c,cDk,cDk2);
+      break;
   }
-
-  // point light under
-  const pl=new THREE.PointLight(sector.color,.4,3);
-  pl.position.y=.5; g.add(pl);
-  g.position.set(x,.01,z);
-  g.scale.setScalar(.01);
-  scene.add(g);
-  structures.push({mesh:g,target:.7+Math.random()*.4,age:0,sector});
 }
 
-// ── Particles (block debris) ──────────────────────────────────────
-const particleGroups=[];
-function spawnParticles(x,z,color){
-  const group=new THREE.Group();
-  const vels=[];
-  for(let i=0;i<10;i++){
-    const s=.06+Math.random()*.1;
-    const cube=new THREE.Mesh(new THREE.BoxGeometry(s,s,s),new THREE.MeshLambertMaterial({color}));
-    cube.position.set(x,0.3,z);
-    const a=Math.random()*Math.PI*2;
-    vels.push({vx:Math.cos(a)*.07,vy:.06+Math.random()*.1,vz:Math.sin(a)*.07});
-    scene.add(cube); group.userData[`c${i}`]={mesh:cube,...vels[i]};
-  }
-  group.userData.life=1; group.userData.vels=vels; group.userData.count=10;
-  scene.add(group); particleGroups.push(group);
+// ── Shade color helper ────────────────────────────────────────────
+function shadeColor(hex, pct) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, Math.min(255, ((n>>16)&0xff) + pct));
+  const g = Math.max(0, Math.min(255, ((n>>8)&0xff) + pct));
+  const b = Math.max(0, Math.min(255, (n&0xff) + pct));
+  return `rgb(${r},${g},${b})`;
 }
+
+// ── Stars ─────────────────────────────────────────────────────────
+const STARS = Array.from({length:180}, () => ({
+  x: Math.random(), y: Math.random() * 0.7,
+  r: Math.random() * 1.4, b: Math.random()
+}));
 
 // ── Bot class ─────────────────────────────────────────────────────
-const bots=[];
-const MAX_BOTS=SECTORS.length*4;
-
 class TurtleBot {
-  constructor(sector,isManager=false){
-    this.sector=sector; this.isManager=isManager;
-    this.mesh=buildTurtleBot(sector,isManager);
-    const a=sector.angle+(Math.random()-.5)*.5;
-    const r=isManager?.6:1.2+Math.random()*2.2;
-    this.mesh.position.set(Math.cos(a)*r,.01,Math.sin(a)*r);
-    this.mesh.rotation.y=Math.random()*Math.PI*2;
-    scene.add(this.mesh);
-    this.tx=this.mesh.position.x; this.tz=this.mesh.position.z;
-    this.speed=isManager?.014:.02+Math.random()*.012;
-    this.state='idle'; this.buildTimer=0; this.buildPos=null;
-    this.idleTimer=Math.floor(Math.random()*80);
-    this.t=Math.random()*100;
-    this.name=isManager?`MASTER-${sector.key.toUpperCase().slice(0,4)}`:`${sector.bandName.slice(0,3)}-${String(Math.floor(Math.random()*99)).padStart(2,'0')}`;
-    this.scaleT=this.mesh.scale.x; this.mesh.scale.setScalar(.01);
-    this.built=0;
+  constructor(sector, isManager=false) {
+    this.sector = sector; this.isManager = isManager;
+    const a = sector.angle + (Math.random()-.5)*.5;
+    const r = isManager ? 0.8 : 1.4 + Math.random() * 2;
+    this.gx = Math.cos(a)*r; this.gy = Math.sin(a)*r;
+    this.tx = this.gx; this.ty = this.gy;
+    this.speed = isManager ? 0.012 : 0.018 + Math.random()*.012;
+    this.state = 'idle';
+    this.buildTimer = 0; this.buildPos = null;
+    this.idleTimer = Math.floor(Math.random()*80);
+    this.t = Math.random()*100;
+    this.walkPhase = 0;
+    this.buildPhase = 0;
+    this.scale = isManager ? 0.75 : 0.55 + Math.random()*.12;
+    this.opacity = 0;
+    this.name = isManager
+      ? `MASTER-${sector.key.toUpperCase().slice(0,4)}`
+      : `${sector.bandName.slice(0,3)}-${String(Math.floor(Math.random()*99)).padStart(2,'0')}`;
+    this.built = 0;
+    this.facing = 1;
+    this.sortZ = 0; // for depth sorting
   }
 
-  update(dt){
-    this.t+=dt;
-    const u=this.mesh.userData;
+  update(dt) {
+    this.t += dt;
+    if (this.opacity < 1) this.opacity = Math.min(1, this.opacity + 0.03);
 
-    // grow in
-    if(this.mesh.scale.x<this.scaleT) this.mesh.scale.setScalar(Math.min(this.scaleT,this.mesh.scale.x+.04));
-
-    // eye glow pulse
-    u.eyeGlow.intensity=.3+Math.sin(this.t*2.2)*.15;
-
-    if(this.state==='idle'){
-      // head bob
-      if(u.headGroup) u.headGroup.rotation.y=Math.sin(this.t*.7)*.15;
-      if(--this.idleTimer<=0){this.chooseTarget();this.state='walk';} return;
+    if (this.state === 'idle') {
+      if (--this.idleTimer <= 0) { this.chooseTarget(); this.state = 'walk'; }
+      return;
+    }
+    if (this.state === 'build') {
+      this.buildPhase += dt;
+      if (--this.buildTimer <= 0) this.finishBuild();
+      return;
     }
 
-    if(this.state==='build'){
-      // arm swing while building
-      if(u.armPivotL) u.armPivotL.rotation.x=(-Math.PI*.6)+Math.sin(this.t*4)*.35;
-      if(u.armPivotR) u.armPivotR.rotation.x=(-Math.PI*.5)+Math.sin(this.t*4+1.2)*.35;
-      if(u.headGroup) u.headGroup.rotation.x=-.25;
-      if(--this.buildTimer<=0) this.finishBuild(); return;
-    }
-
-    const dx=this.tx-this.mesh.position.x, dz=this.tz-this.mesh.position.z;
-    const dist=Math.sqrt(dx*dx+dz*dz);
-    if(dist<.06){
-      this.mesh.position.x=this.tx; this.mesh.position.z=this.tz;
-      const r=Math.sqrt(this.mesh.position.x**2+this.mesh.position.z**2);
-      if(r<worldRadius*.86&&Math.random()<.55&&!this.isManager){
-        this.state='build'; this.buildTimer=70+Math.random()*80;
-        this.buildPos={x:this.mesh.position.x,z:this.mesh.position.z};
-      } else { this.state='idle'; this.idleTimer=30+Math.floor(Math.random()*60); }
+    const dx = this.tx - this.gx, dy = this.ty - this.gy;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < 0.05) {
+      this.gx = this.tx; this.gy = this.ty;
+      const r = Math.sqrt(this.gx**2 + this.gy**2);
+      if (r < worldRadius * 0.86 && Math.random() < .55 && !this.isManager) {
+        this.state = 'build';
+        this.buildTimer = 70 + Math.random()*80;
+        this.buildPhase = 0;
+        this.buildPos = { gx: this.gx, gy: this.gy };
+      } else {
+        this.state = 'idle';
+        this.idleTimer = 30 + Math.floor(Math.random()*60);
+      }
     } else {
-      this.mesh.rotation.y=Math.atan2(dx,dz);
-      this.mesh.position.x+=dx/dist*this.speed;
-      this.mesh.position.z+=dz/dist*this.speed;
-      // walk bounce
-      const wb=Math.sin(this.t*7)*dt*.006;
-      this.mesh.position.y=.01+Math.abs(Math.sin(this.t*7))*.04;
-      // leg swing
-      if(u.legL) u.legL.rotation.x=Math.sin(this.t*7)*.3;
-      if(u.legR) u.legR.rotation.x=-Math.sin(this.t*7)*.3;
-      if(u.armPivotL) u.armPivotL.rotation.x=-Math.sin(this.t*7)*.25;
-      if(u.armPivotR) u.armPivotR.rotation.x=Math.sin(this.t*7)*.25;
-      if(u.headGroup) { u.headGroup.rotation.x=0; u.headGroup.rotation.y=Math.sin(this.t*3)*.08; }
+      this.gx += dx/dist * this.speed;
+      this.gy += dy/dist * this.speed;
+      this.walkPhase += dt * 0.25;
     }
+    this.sortZ = this.gx + this.gy;
   }
 
-  chooseTarget(){
-    const a=this.sector.angle+(Math.random()-.5)*(this.isManager?.7:1.05);
-    const r=this.isManager?.4+Math.random()*worldRadius*.35:.2+Math.random()*worldRadius*.8;
-    this.tx=Math.cos(a)*r; this.tz=Math.sin(a)*r;
+  chooseTarget() {
+    const a = this.sector.angle + (Math.random()-.5) * (this.isManager ? .7 : 1.1);
+    const r = this.isManager
+      ? 0.4 + Math.random() * worldRadius * .35
+      : 0.2 + Math.random() * worldRadius * .82;
+    this.tx = Math.cos(a)*r; this.ty = Math.sin(a)*r;
   }
 
-  finishBuild(){
-    spawnStructure(this.buildPos.x,this.buildPos.z,this.sector);
-    spawnParticles(this.buildPos.x,this.buildPos.z,this.sector.color);
-    this.built++; this.state='idle'; this.idleTimer=20;
-    if(this.mesh.userData.armPivotL) this.mesh.userData.armPivotL.rotation.x=0;
-    if(this.mesh.userData.armPivotR) this.mesh.userData.armPivotR.rotation.x=0;
-    if(this.mesh.userData.headGroup) this.mesh.userData.headGroup.rotation.x=0;
-    const tasks=this.sector.tasks;
-    addLog(this.sector,this.name,tasks[Math.floor(Math.random()*tasks.length)]);
+  finishBuild() {
+    structures.push({ gx: this.buildPos.gx, gy: this.buildPos.gy, sector: this.sector, scale: 0.01, targetScale: 0.7 + Math.random()*.4, sortZ: this.buildPos.gx + this.buildPos.gy });
+    // particles
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random()*Math.PI*2;
+      particles.push({ gx: this.buildPos.gx, gy: this.buildPos.gy, z: 0.3,
+        vx: Math.cos(a)*.06, vy: Math.sin(a)*.04, vz: .08+Math.random()*.1,
+        life: 1, color: this.sector.bandana });
+    }
+    this.built++;
+    this.state = 'idle'; this.idleTimer = 20;
+    this.buildPhase = 0;
+    const tasks = this.sector.tasks;
+    addLog(this.sector, this.name, tasks[Math.floor(Math.random()*tasks.length)]);
     updateStats();
+  }
+
+  draw() {
+    drawTurtle(this.gx, this.gy, this.sector.bandana, this.isManager, this.facing, this.walkPhase, this.buildPhase, this.scale, this.opacity);
   }
 }
 
 // ── Feed & stats ──────────────────────────────────────────────────
-function addLog(sector,name,msg){
-  const feed=document.getElementById('feed');
-  const el=document.createElement('div'); el.className='log';
-  el.style.borderLeftColor=sector.hex;
-  el.innerHTML=`<span class="who" style="color:${sector.hex}">${name}</span>${msg}`;
+function addLog(sector, name, msg) {
+  const feed = document.getElementById('feed');
+  const el = document.createElement('div'); el.className = 'log';
+  el.style.borderLeftColor = sector.bandana;
+  el.innerHTML = `<span class="who" style="color:${sector.bandana}">${name}</span>${msg}`;
   feed.prepend(el);
-  while(feed.children.length>3) feed.removeChild(feed.lastChild);
+  while (feed.children.length > 3) feed.removeChild(feed.lastChild);
 }
-function updateStats(){
-  document.getElementById('p-bots').textContent=`TURTLES ${bots.length}`;
-  document.getElementById('p-built').textContent=`BUILT ${structures.length}`;
-  document.getElementById('p-exp').textContent=`WORLD ${Math.round(worldRadius/worldMax*100)}%`;
+function updateStats() {
+  document.getElementById('p-bots').textContent = `TURTLES ${bots.length}`;
+  document.getElementById('p-built').textContent = `BUILT ${structures.length}`;
+  document.getElementById('p-exp').textContent = `WORLD ${Math.round(worldRadius/worldMax*100)}%`;
 }
 
 // ── Main loop ─────────────────────────────────────────────────────
-const clock=new THREE.Clock();
-let totalFrames=0, spawnTimer=0, growTimer=0;
+let lastTime = 0, frame = 0, spawnTimer = 0, growTimer = 0;
 
-function loop(){
+function loop(ts) {
   requestAnimationFrame(loop);
-  const dt=clock.getDelta()*60;
-  totalFrames++;
+  const dt = Math.min((ts - lastTime) / 16.67, 3); lastTime = ts;
+  frame++;
 
-  // World grow
-  worldRadius+=(worldTarget-worldRadius)*.016;
-  ring.scale.setScalar(worldRadius/worldMax);
-  growTimer+=dt;
-  if(growTimer>200){ worldTarget=Math.min(worldMax,worldTarget+.6+Math.random()*.8); growTimer=0; }
-  if(totalFrames%8===0) ensureGrassBlocks();
+  // Resize ISO scale dynamically
+  const s = Math.min(W, H) * 0.045;
+  const IS = s;
 
-  // Spawn turtles
-  spawnTimer+=dt;
-  if(spawnTimer>260&&bots.length<MAX_BOTS&&worldRadius>2){
-    SECTORS.forEach(s=>{
-      if(!bots.some(b=>b.isManager&&b.sector===s)){
-        const b=new TurtleBot(s,true); bots.push(b);
-        addLog(s,b.name,`Sensei of ${s.label}`);
+  // Grow world
+  worldRadius += (worldTarget - worldRadius) * 0.015;
+  growTimer += dt;
+  if (growTimer > 200) { worldTarget = Math.min(worldMax, worldTarget + 0.5 + Math.random()*.8); growTimer = 0; }
+  if (frame % 6 === 0) ensureGrass();
+
+  // Spawn
+  spawnTimer += dt;
+  if (spawnTimer > 260 && bots.length < SECTORS.length * 4 && worldRadius > 2) {
+    SECTORS.forEach(s => {
+      if (!bots.some(b => b.isManager && b.sector === s)) {
+        const b = new TurtleBot(s, true); bots.push(b);
+        addLog(s, b.name, `Sensei of ${s.label}`);
         updateStats();
       }
     });
-    if(bots.length<MAX_BOTS){
-      const s=SECTORS[Math.floor(Math.random()*SECTORS.length)];
-      const b=new TurtleBot(s,false); bots.push(b);
-      addLog(s,b.name,`COWABUNGA!`);
+    if (bots.length < SECTORS.length * 4) {
+      const s = SECTORS[Math.floor(Math.random()*SECTORS.length)];
+      const b = new TurtleBot(s, false); bots.push(b);
+      addLog(s, b.name, 'COWABUNGA!');
       updateStats();
     }
-    spawnTimer=0;
+    spawnTimer = 0;
   }
 
-  // Update bots
-  bots.forEach(b=>{
-    const r=Math.sqrt(b.mesh.position.x**2+b.mesh.position.z**2);
-    if(r>worldRadius*.9&&b.state==='walk'){ b.tx=b.mesh.position.x*.35; b.tz=b.mesh.position.z*.35; }
+  // Update
+  bots.forEach(b => {
+    const r = Math.sqrt(b.gx**2 + b.gy**2);
+    if (r > worldRadius * .9 && b.state === 'walk') { b.tx = b.gx*.35; b.ty = b.gy*.35; }
     b.update(dt);
   });
+  structures.forEach(s => { if (s.scale < s.targetScale) s.scale = Math.min(s.targetScale, s.scale + 0.04*dt); });
+  for (let i = particles.length-1; i >= 0; i--) {
+    const p = particles[i];
+    p.gx += p.vx*dt; p.gy += p.vy*dt; p.z += p.vz*dt;
+    p.vz -= 0.003*dt; p.life -= 0.02*dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
 
-  // Grow structures
-  structures.forEach(s=>{
-    s.age+=dt;
-    if(s.mesh.scale.x<s.target) s.mesh.scale.setScalar(Math.min(s.target,s.mesh.scale.x+.05*dt));
-    s.mesh.rotation.y+=.002*dt;
+  // ── DRAW ──────────────────────────────────────────────────────
+  ctx.clearRect(0, 0, W, H);
+
+  // Sky gradient
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#020a01'); sky.addColorStop(1, '#0a1508');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+
+  // Stars
+  STARS.forEach(st => {
+    const pulse = Math.sin(frame*.01 + st.b*10) * .25 + .75;
+    ctx.fillStyle = `rgba(160,210,140,${st.b*.5*pulse})`;
+    ctx.beginPath(); ctx.arc(st.x*W, st.y*H, st.r, 0, Math.PI*2); ctx.fill();
   });
 
-  // Block particles
-  for(let i=particleGroups.length-1;i>=0;i--){
-    const pg=particleGroups[i];
-    pg.userData.life-=.018*dt;
-    for(let j=0;j<pg.userData.count;j++){
-      const cv=pg.userData[`c${j}`];
-      if(!cv||!cv.mesh) continue;
-      cv.mesh.position.x+=cv.vx*dt; cv.mesh.position.y+=cv.vy*dt; cv.mesh.position.z+=cv.vz*dt;
-      cv.vy-=.002*dt;
-      cv.mesh.material.opacity=pg.userData.life;
-      cv.mesh.material.transparent=true;
-      cv.mesh.rotation.x+=.05*dt; cv.mesh.rotation.z+=.04*dt;
+  // Horizon glow
+  const hg = ctx.createRadialGradient(OX, OY, 0, OX, OY, Math.min(W,H)*.5);
+  hg.addColorStop(0, 'rgba(30,80,10,0.18)'); hg.addColorStop(1, 'transparent');
+  ctx.fillStyle = hg; ctx.fillRect(0, 0, W, H);
+
+  // Depth-sort everything by gx+gy (isometric painter's algo)
+  const allDrawables = [];
+  grassBlocks.forEach(g => allDrawables.push({ sort: g.gx+g.gy, type:'grass', d:g }));
+  structures.forEach(s => allDrawables.push({ sort: s.gx+s.gy+0.5, type:'struct', d:s }));
+  particles.forEach(p => allDrawables.push({ sort: p.gx+p.gy+0.8, type:'particle', d:p }));
+  bots.forEach(b => allDrawables.push({ sort: b.sortZ+1, type:'bot', d:b }));
+  allDrawables.sort((a,b) => a.sort - b.sort);
+
+  // World edge glow under ground
+  const wr = worldRadius;
+  const { sx: cx, sy: cy } = iso(0,0,0);
+  const eg = ctx.createRadialGradient(cx, cy, 0, cx, cy, wr * Math.min(W,H)*.045 * 1.8);
+  eg.addColorStop(0,'rgba(40,120,10,0.1)'); eg.addColorStop(.7,'rgba(20,80,5,0.06)'); eg.addColorStop(1,'transparent');
+  ctx.fillStyle = eg; ctx.fillRect(0,0,W,H);
+
+  allDrawables.forEach(item => {
+    const d = item.d;
+    switch(item.type) {
+      case 'grass':
+        drawCube(d.gx, d.gy, 0, 1, 1, d.h, d.color, shadeColor(d.color, -20), shadeColor(d.color, -35));
+        break;
+      case 'struct':
+        drawStructure(d.gx, d.gy, d.sector, d.scale);
+        break;
+      case 'particle':
+        const pp = iso(d.gx, d.gy, d.z);
+        ctx.globalAlpha = d.life;
+        ctx.fillStyle = d.color;
+        ctx.fillRect(pp.sx-3, pp.sy-3, 6, 6);
+        ctx.globalAlpha = 1;
+        break;
+      case 'bot':
+        d.draw();
+        break;
     }
-    if(pg.userData.life<=0){
-      for(let j=0;j<pg.userData.count;j++){
-        const cv=pg.userData[`c${j}`]; if(cv&&cv.mesh) scene.remove(cv.mesh);
-      }
-      scene.remove(pg); particleGroups.splice(i,1);
+  });
+
+  // Beacon beam (center)
+  const bc = iso(0,0,0);
+  const beamGrad = ctx.createLinearGradient(bc.sx, bc.sy, bc.sx, 0);
+  beamGrad.addColorStop(0, `rgba(100,255,50,${0.12+Math.sin(frame*.04)*.05})`);
+  beamGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = beamGrad;
+  ctx.fillRect(bc.sx-6, 0, 12, bc.sy);
+
+  // Center core
+  const cp = Math.sin(frame*.05)*.2+.8;
+  const cg = ctx.createRadialGradient(bc.sx, bc.sy, 0, bc.sx, bc.sy, 22*cp);
+  cg.addColorStop(0, 'rgba(160,255,80,0.9)'); cg.addColorStop(.4,'rgba(80,200,30,0.4)'); cg.addColorStop(1,'transparent');
+  ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(bc.sx, bc.sy, 22*cp, 0, Math.PI*2); ctx.fill();
+
+  // Manager check-in logs
+  if (frame % 320 === 0) {
+    const mgrs = bots.filter(b => b.isManager);
+    if (mgrs.length) {
+      const m = mgrs[Math.floor(Math.random()*mgrs.length)];
+      const lines = ['Turtle power!','Delegating tasks','Shell check clear','Reviewing sector','Syncing the crew'];
+      addLog(m.sector, m.name, lines[Math.floor(Math.random()*lines.length)]);
     }
   }
-
-  // Core pulse
-  const cp=Date.now()*.001;
-  coreLight.intensity=3+Math.sin(cp*2)*1;
-  beaconMesh.material.opacity=.7+Math.sin(cp*1.5)*.2;
-  beamMesh.material.opacity=.08+Math.sin(cp)*.04;
-  beaconMesh.rotation.y+=.01*dt;
-
-  // Slow camera orbit
-  const ca=totalFrames*.0004;
-  camera.position.x=Math.sin(ca)*14;
-  camera.position.z=Math.cos(ca)*11;
-  camera.position.y=12.5+Math.sin(ca*.4);
-  camera.lookAt(0,.5,0);
-
-  // Manager check-ins
-  if(totalFrames%320===0){
-    const mgrs=bots.filter(b=>b.isManager);
-    if(mgrs.length){
-      const m=mgrs[Math.floor(Math.random()*mgrs.length)];
-      const lines=['Turtle power!','Delegating tasks','Shell check — all clear','Reviewing sector','Syncing the crew'];
-      addLog(m.sector,m.name,lines[Math.floor(Math.random()*lines.length)]);
-    }
-  }
-
-  renderer.render(scene,camera);
 }
 
-setTimeout(()=>{
-  worldTarget=3.2;
-  addLog(SECTORS[4],'MASTER-HQ','Bot Crossing awakens...');
-  loop();
-},100);
+setTimeout(() => {
+  worldTarget = 3.2;
+  addLog(SECTORS[4], 'MASTER-HQ', 'Bot Crossing awakens...');
+  requestAnimationFrame(loop);
+}, 100);
 </script>
