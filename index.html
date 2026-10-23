@@ -2,1060 +2,588 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=VT323&display=swap">
 <style>
-  :root{color-scheme:dark}
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body{width:100%;height:100%;background:#030201;overflow:hidden}
-  #c{position:fixed;inset:0;width:100%;height:100%}
-  #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
-  #topbar{position:absolute;top:max(14px,env(safe-area-inset-top,0px));
-    left:max(14px,env(safe-area-inset-left,0px));right:max(14px,env(safe-area-inset-right,0px));
-    display:flex;align-items:center;justify-content:space-between;gap:8px}
-  #logo{font-family:'Orbitron',monospace;font-size:clamp(11px,1.8vw,16px);font-weight:900;
-    letter-spacing:.18em;color:#b89050;text-shadow:0 0 16px #b8905066,0 0 40px #b8905022}
-  #clock{font-family:'Orbitron',monospace;font-size:clamp(9px,1.3vw,12px);color:#608850;
-    letter-spacing:.1em;background:rgba(0,0,0,.75);padding:3px 10px;
-    border:1px solid rgba(80,120,40,.35);border-radius:3px}
-  #feed{position:absolute;bottom:max(14px,env(safe-area-inset-bottom,0px));
-    left:max(14px,env(safe-area-inset-left,0px));right:max(14px,env(safe-area-inset-right,0px));
-    display:flex;flex-direction:column;gap:4px;max-height:90px;overflow:hidden}
-  .log{font-family:'VT323',monospace;font-size:15px;color:#485848;padding:4px 12px;
-    background:rgba(2,4,2,.92);border-left:2px solid #304820;border-radius:0 3px 3px 0;
-    animation:sl .35s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .log .who{font-weight:600;margin-right:7px}
-  @keyframes sl{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
-  #cam-label{position:absolute;bottom:max(120px,120px);left:50%;transform:translateX(-50%);
-    font-family:'Orbitron',monospace;font-size:clamp(9px,1.2vw,11px);font-weight:700;
-    letter-spacing:.22em;color:rgba(180,150,80,.55);text-align:center;pointer-events:none}
+:root{color-scheme:dark}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;background:#030201;overflow:hidden}
+#c{position:fixed;inset:0;width:100%;height:100%}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+#topbar{position:absolute;top:max(14px,env(safe-area-inset-top,0px));
+left:max(14px,env(safe-area-inset-left,0px));right:max(14px,env(safe-area-inset-right,0px));
+display:flex;align-items:center;justify-content:space-between;gap:8px}
+#logo{font-family:'Orbitron',monospace;font-size:clamp(11px,1.8vw,16px);font-weight:900;
+letter-spacing:.18em;color:#b89050;text-shadow:0 0 16px #b8905066,0 0 40px #b8905022}
+#clock{font-family:'Orbitron',monospace;font-size:clamp(9px,1.3vw,12px);color:#608850;
+letter-spacing:.1em;background:rgba(0,0,0,.75);padding:3px 10px;
+border:1px solid rgba(80,120,40,.35);border-radius:3px}
+#feed{position:absolute;bottom:max(14px,env(safe-area-inset-bottom,0px));
+left:max(14px,env(safe-area-inset-left,0px));right:max(14px,env(safe-area-inset-right,0px));
+display:flex;flex-direction:column;gap:4px;max-height:90px;overflow:hidden}
+.log{font-family:'VT323',monospace;font-size:15px;color:#485848;padding:4px 12px;
+background:rgba(2,4,2,.92);border-left:2px solid #304820;border-radius:0 3px 3px 0;
+animation:sl .35s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log .who{font-weight:600;margin-right:7px}
+@keyframes sl{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+#cam-label{position:absolute;bottom:max(120px,120px);left:50%;transform:translateX(-50%);
+font-family:'Orbitron',monospace;font-size:clamp(9px,1.2vw,11px);font-weight:700;
+letter-spacing:.22em;color:rgba(180,150,80,.55);text-align:center;pointer-events:none}
 </style>
 
 <canvas id="c"></canvas>
 <div id="hud">
   <div id="topbar">
-    <div id="logo">BOT CROSSING · SEWER LAIR</div>
+    <div id="logo">BOT CROSSING Â· SEWER LAIR</div>
     <div id="clock">00:00:00</div>
   </div>
   <div id="feed"></div>
   <div id="cam-label"></div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
+// ââ Renderer & Scene âââââââââââââââââââââââââââââââââââââââââââââ
 const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
-let W, H;
-function resize(){ W=canvas.width=window.innerWidth; H=canvas.height=window.innerHeight; }
-resize(); window.addEventListener('resize', resize);
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ReinhardToneMapping;
+renderer.toneMappingExposure = 1.8;
 
-// ── Clock ─────────────────────────────────────────────────────────
-function tickClock(){
-  const d=new Date();
-  document.getElementById('clock').textContent=
-    String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');
-}
-tickClock(); setInterval(tickClock,1000);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x020100);
+scene.fog = new THREE.FogExp2(0x020100, 0.038);
 
-// ── Camera ────────────────────────────────────────────────────────
-const cam={x:0,y:0,zoom:.6,tx:0,ty:0,tz:.6};
-function ws(wx,wy){return{sx:(wx-cam.x)*cam.zoom+W/2, sy:(wy-cam.y)*cam.zoom+H/2};}
-function scl(v){return v*cam.zoom;}
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth/window.innerHeight, 0.1, 250);
 
-// ── Color utils ───────────────────────────────────────────────────
-function hexRgb(h){const n=parseInt(h.replace('#',''),16);return`${(n>>16)&255},${(n>>8)&255},${n&255}`;}
-function shade(hex,p){
-  const n=parseInt(hex.replace('#',''),16);
-  const r=Math.max(0,Math.min(255,((n>>16)&255)+p));
-  const g=Math.max(0,Math.min(255,((n>>8)&255)+p));
-  const b=Math.max(0,Math.min(255,(n&255)+p));
-  return`#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
-}
-function rgba(hex,a){return`rgba(${hexRgb(hex)},${a})`;}
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+});
 
-// ── Rooms ─────────────────────────────────────────────────────────
-const ROOMS=[
-  {key:'hub',      label:'THE SEWER LAIR', cx:0,    cy:0,    r:270, wallColor:'#2a1e0e', floorColor:'#120e08', accentColor:'#c8a050', isTurtle:false},
-  {key:'leo',      label:"LEO'S DOJO",     cx:-530, cy:-310, r:210, wallColor:'#0e1428', floorColor:'#080c18', accentColor:'#2266cc',
-   bandana:'#2266cc', name:'LEONARDO', tasks:['Post AM workout reel','Morning training film','Technique breakdown','Athlete routine','Discipline post','Kata session reel']},
-  {key:'don',      label:"DON'S LAB",      cx:530,  cy:-310, r:210, wallColor:'#180820', floorColor:'#0c0614', accentColor:'#8822bb',
-   bandana:'#8822bb', name:'DONATELLO', tasks:['Prototype v2 spec','User research loop','App wireframe','Backend schema','Supplier outreach','Pitch deck slide']},
-  {key:'raph',     label:"RAPH'S GYM",     cx:-530, cy:310,  r:210, wallColor:'#220808', floorColor:'#160404', accentColor:'#cc2222',
-   bandana:'#cc2222', name:'RAPHAEL', tasks:['Design drop concept','Launch campaign','Sample request','Brand guide','Collab pitch','Drop teaser reel']},
-  {key:'mikey',    label:"MIKEY'S STUDIO", cx:530,  cy:310,  r:210, wallColor:'#201008', floorColor:'#120a04', accentColor:'#dd7700',
-   bandana:'#dd7700', name:'MICHELANGELO', tasks:['Gallery concept','Merch design','Cheat day haul','Cook-along video','COWABUNGA post','Art timelapse']},
-  {key:'splinter', label:"SPLINTER'S WAR ROOM", cx:0, cy:490, r:190, wallColor:'#0c1208', floorColor:'#060a04', accentColor:'#449933',
-   bandana:'#449933', name:'SPLINTER', isSplinter:true, tasks:['Sprint planning','OKR review','Roadmap update','Team stand-up','Weekly recap','Assess the mission']},
+// ââ Rooms & Tunnel Config âââââââââââââââââââââââââââââââââââââââââ
+const ROOMS = [
+  {key:'hub',   label:'THE SEWER LAIR',       x:0,   z:0,   color:0xc8a050, radius:5.0, name:'HUB',          tasks:null, isTurtle:false},
+  {key:'leo',   label:"LEO'S DOJO",            x:-13, z:-10, color:0x2266cc, radius:3.8, name:'LEONARDO',      bandana:0x2266cc,
+    tasks:['Post AM workout reel','Morning training film','Technique breakdown','Athlete routine','Discipline post','Kata session reel']},
+  {key:'don',   label:"DON'S LAB",             x:13,  z:-10, color:0x8822bb, radius:3.8, name:'DONATELLO',     bandana:0x8822bb,
+    tasks:['Prototype v2 spec','User research loop','App wireframe','Backend schema','Supplier outreach','Pitch deck slide']},
+  {key:'raph',  label:"RAPH'S GYM",            x:-13, z:10,  color:0xcc2222, radius:3.8, name:'RAPHAEL',       bandana:0xcc2222,
+    tasks:['Design drop concept','Launch campaign','Sample request','Brand guide','Collab pitch','Drop teaser reel']},
+  {key:'mikey', label:"MIKEY'S STUDIO",        x:13,  z:10,  color:0xdd7700, radius:3.8, name:'MICHELANGELO',  bandana:0xdd7700,
+    tasks:['Gallery concept','Merch design','Cheat day haul','Cook-along video','COWABUNGA post','Art timelapse']},
+  {key:'spl',   label:"SPLINTER'S WAR ROOM",   x:0,   z:15,  color:0x449933, radius:3.5, name:'SPLINTER',      bandana:0x449933, isSplinter:true,
+    tasks:['Sprint planning','OKR review','Roadmap update','Team stand-up','Weekly recap','Assess the mission']},
 ];
 
-const TUNNELS=[
-  {from:'hub',to:'leo',w:90},{from:'hub',to:'don',w:90},
-  {from:'hub',to:'raph',w:90},{from:'hub',to:'mikey',w:90},
-  {from:'hub',to:'splinter',w:90},
+const TUNNELS = [
+  {from:'hub',to:'leo'},{from:'hub',to:'don'},
+  {from:'hub',to:'raph'},{from:'hub',to:'mikey'},{from:'hub',to:'spl'},
 ];
 
-// ── Particles ─────────────────────────────────────────────────────
-const parts=[];
-function steam(x,y,col,n=3){
-  for(let i=0;i<n;i++) parts.push({x,y,vx:(Math.random()-.5)*.35,vy:-.55-Math.random()*.4,
-    life:1,decay:.006+Math.random()*.005,r:2+Math.random()*4,col,type:'steam'});
-}
-function drip(x,y){
-  parts.push({x,y,vx:0,vy:.35+Math.random()*.2,life:1,decay:.014,r:1.8,col:'#1a3a5a',type:'drip'});
-}
-function spark(x,y,col){
-  for(let i=0;i<7;i++){const a=Math.random()*Math.PI*2;
-    parts.push({x,y,vx:Math.cos(a)*(1.5+Math.random()*2.5),vy:Math.sin(a)*(1.5+Math.random()*2.5)-.5,
-      life:1,decay:.05+Math.random()*.04,r:2,col,type:'spark'});}
-}
+// ââ Shared Materials ââââââââââââââââââââââââââââââââââââââââââââââ
+const M = {
+  brick:  new THREE.MeshStandardMaterial({color:0x1a1008, roughness:0.95, metalness:0.0}),
+  floor:  new THREE.MeshStandardMaterial({color:0x0d0a06, roughness:1.0,  metalness:0.0}),
+  ground: new THREE.MeshStandardMaterial({color:0x050402, roughness:1.0,  metalness:0.0}),
+  water:  new THREE.MeshStandardMaterial({color:0x0a1828, roughness:0.05, metalness:0.6, transparent:true, opacity:0.82}),
+  green:  new THREE.MeshStandardMaterial({color:0x3a7820, roughness:0.8,  metalness:0.0}),
+  shell:  new THREE.MeshStandardMaterial({color:0x3d2e10, roughness:0.85, metalness:0.0}),
+  bodyGreen: new THREE.MeshStandardMaterial({color:0x3a8020, roughness:0.8, metalness:0.0}),
+};
 
-// ── Brick texture helper ──────────────────────────────────────────
-function drawBricks(cx,cy,r,wallCol,t){
-  ctx.save();
-  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.clip();
-  // Mortar base
-  ctx.fillStyle=shade(wallCol,-15);
-  ctx.fillRect(cx-r,cy-r,r*2,r*2);
-  // Brick rows
-  const bh=scl(18), bw=scl(36);
-  ctx.fillStyle=wallCol;
-  for(let row=0;row<Math.ceil(r*2/bh)+1;row++){
-    const oy=(row%2)*(bw*.5);
-    for(let col=0;col<Math.ceil(r*2/bw)+2;col++){
-      const bx=cx-r+col*bw-oy, by=cy-r+row*bh;
-      const noise=Math.sin(bx*0.13+by*0.17)*3;
-      ctx.fillStyle=`rgb(${parseInt(wallCol.slice(1,3),16)+noise|0},${parseInt(wallCol.slice(3,5),16)+noise|0},${parseInt(wallCol.slice(5,7),16)+noise|0})`;
-      ctx.fillRect(bx+1,by+1,bw-2,bh-2);
-    }
+// ââ Ambient & Directional Light âââââââââââââââââââââââââââââââââââ
+scene.add(new THREE.AmbientLight(0x110e08, 0.25));
+const dirLight = new THREE.DirectionalLight(0xffe8a0, 0.15);
+dirLight.position.set(0, 20, 0);
+scene.add(dirLight);
+
+// ââ Ground ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+const groundMesh = new THREE.Mesh(new THREE.PlaneGeometry(120, 120, 1, 1), M.ground);
+groundMesh.rotation.x = -Math.PI/2;
+groundMesh.receiveShadow = true;
+scene.add(groundMesh);
+
+// ââ Build Rooms âââââââââââââââââââââââââââââââââââââââââââââââââââ
+ROOMS.forEach(room => {
+  const g = new THREE.Group();
+  g.position.set(room.x, 0, room.z);
+  scene.add(g);
+  room.group = g;
+
+  // Platform disk
+  const platGeo = new THREE.CylinderGeometry(room.radius, room.radius+0.35, 0.35, 32);
+  const platMat = new THREE.MeshStandardMaterial({color:0x0b0b07, roughness:0.95});
+  const plat = new THREE.Mesh(platGeo, platMat);
+  plat.position.y = 0.175;
+  plat.receiveShadow = true;
+  g.add(plat);
+
+  // Brick wall segments
+  const nWalls = Math.round(room.radius * 3.6);
+  for (let i = 0; i < nWalls; i++) {
+    const ang = (i/nWalls)*Math.PI*2;
+    const ww = (Math.PI*2*room.radius/nWalls)*0.88;
+    const wGeo = new THREE.BoxGeometry(ww, 2.0, 0.42);
+    const w = new THREE.Mesh(wGeo, M.brick);
+    w.position.set(Math.cos(ang)*(room.radius+0.22), 1.35, Math.sin(ang)*(room.radius+0.22));
+    w.rotation.y = ang + Math.PI/2;
+    w.castShadow = true; w.receiveShadow = true;
+    g.add(w);
   }
-  // Mortar lines — subtle darker
-  ctx.strokeStyle=`rgba(0,0,0,.35)`; ctx.lineWidth=1;
-  for(let row=0;row<Math.ceil(r*2/bh)+1;row++){
-    ctx.beginPath(); ctx.moveTo(cx-r,cy-r+row*bh); ctx.lineTo(cx+r,cy-r+row*bh); ctx.stroke();
-    const oy=(row%2)*(bw*.5);
-    for(let col=0;col<Math.ceil(r*2/bw)+2;col++){
-      const bx=cx-r+col*bw-oy;
-      ctx.beginPath(); ctx.moveTo(bx,cy-r+row*bh); ctx.lineTo(bx,cy-r+(row+1)*bh); ctx.stroke();
-    }
+
+  // Glowing accent ring at platform edge
+  const ringGeo = new THREE.TorusGeometry(room.radius-0.05, 0.07, 8, 64);
+  const ringMat = new THREE.MeshStandardMaterial({
+    color:room.color, emissive:room.color, emissiveIntensity:0.9
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = Math.PI/2;
+  ring.position.y = 0.38;
+  g.add(ring);
+  room.ringMat = ringMat;
+
+  // Point light above room center
+  const ptLight = new THREE.PointLight(room.color, 1.4, room.radius*4.2, 2);
+  ptLight.position.set(0, 5.5, 0);
+  ptLight.castShadow = true;
+  ptLight.shadow.mapSize.set(512, 512);
+  g.add(ptLight);
+  room.ptLight = ptLight;
+
+  // Ceiling lamp fixture
+  const lampGeo = new THREE.CylinderGeometry(0.08, 0.22, 0.3, 8);
+  const lampMat = new THREE.MeshStandardMaterial({color:0x2a2010, roughness:0.6, metalness:0.5});
+  const lamp = new THREE.Mesh(lampGeo, lampMat);
+  lamp.position.y = 5.8;
+  g.add(lamp);
+  const bulbGeo = new THREE.SphereGeometry(0.14, 8, 6);
+  const bulbMat = new THREE.MeshStandardMaterial({
+    color:room.color, emissive:room.color, emissiveIntensity:2.0
+  });
+  const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+  bulb.position.y = 5.45;
+  g.add(bulb);
+  room.bulbMat = bulbMat;
+
+  // Hub extras: water channel, manhole
+  if (room.key === 'hub') {
+    const waterGeo = new THREE.BoxGeometry(2.8, 0.08, 5.0);
+    const water = new THREE.Mesh(waterGeo, M.water);
+    water.position.set(0, 0.4, 0.5);
+    g.add(water);
+    room.waterMesh = water;
+
+    // Manhole circle
+    const mhGeo = new THREE.CylinderGeometry(0.9, 0.9, 0.08, 24);
+    const mhMat = new THREE.MeshStandardMaterial({color:0x2a1e08, roughness:0.7, metalness:0.4});
+    const mh = new THREE.Mesh(mhGeo, mhMat);
+    mh.position.set(0, 0.38, -2.5);
+    g.add(mh);
+    // Manhole glow from above
+    const mhLight = new THREE.SpotLight(0xffe880, 0.8, 8, Math.PI/10, 0.5, 2);
+    mhLight.position.set(0, 7, -2.5);
+    mhLight.target.position.set(0, 0, -2.5);
+    g.add(mhLight); g.add(mhLight.target);
   }
-  ctx.restore();
-}
+});
 
-// ── Floor texture helper ──────────────────────────────────────────
-function drawFloor(cx,cy,r,floorCol,accentCol){
-  // Wet concrete floor with puddles
-  const fg=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
-  fg.addColorStop(0,shade(floorCol,12));
-  fg.addColorStop(.6,floorCol);
-  fg.addColorStop(1,shade(floorCol,-10));
-  ctx.fillStyle=fg;
-  ctx.beginPath(); ctx.arc(cx,cy,r*.97,0,Math.PI*2); ctx.fill();
+// ââ Build Tunnels âââââââââââââââââââââââââââââââââââââââââââââââââ
+TUNNELS.forEach(tn => {
+  const r1 = ROOMS.find(r => r.key === tn.from);
+  const r2 = ROOMS.find(r => r.key === tn.to);
+  const v1 = new THREE.Vector3(r1.x, 0, r1.z);
+  const v2 = new THREE.Vector3(r2.x, 0, r2.z);
+  const dir = v2.clone().sub(v1);
+  const len = dir.length();
+  const usable = len - r1.radius - r2.radius - 0.4;
+  if (usable <= 0) return;
+  const mid = v1.clone().add(dir.clone().normalize().multiplyScalar(r1.radius + usable/2 + 0.2));
+  const ang = Math.atan2(dir.x, dir.z);
 
-  // Floor cracks
-  ctx.save();
-  ctx.beginPath(); ctx.arc(cx,cy,r*.97,0,Math.PI*2); ctx.clip();
-  ctx.strokeStyle=`rgba(0,0,0,.25)`; ctx.lineWidth=scl(.8);
-  for(let i=0;i<5;i++){
-    const a=Math.random()*Math.PI*2, cr=Math.random()*r*.7;
-    const x1=cx+Math.cos(a)*cr*.2, y1=cy+Math.sin(a)*cr*.2;
-    const x2=cx+Math.cos(a+.3)*cr, y2=cy+Math.sin(a+.3)*cr;
-    ctx.beginPath(); ctx.moveTo(x1,y1);
-    ctx.bezierCurveTo(x1+(x2-x1)*.3+(Math.random()-.5)*scl(20),y1+(y2-y1)*.3+(Math.random()-.5)*scl(20),
-      x1+(x2-x1)*.7+(Math.random()-.5)*scl(20),y1+(y2-y1)*.7+(Math.random()-.5)*scl(20),x2,y2);
-    ctx.stroke();
-  }
-  // Puddle reflections
-  for(let i=0;i<3;i++){
-    const px=cx+(Math.random()-.5)*r*.8, py=cy+(Math.random()-.5)*r*.8;
-    const pr=scl(8+Math.random()*18);
-    const pg=ctx.createRadialGradient(px,py,0,px,py,pr);
-    pg.addColorStop(0,rgba(accentCol,.08));
-    pg.addColorStop(1,'transparent');
-    ctx.fillStyle=pg; ctx.beginPath(); ctx.ellipse(px,py,pr,pr*.35,0,0,Math.PI*2); ctx.fill();
-  }
-  ctx.restore();
-}
+  // Floor
+  const fGeo = new THREE.BoxGeometry(1.9, 0.2, usable);
+  const fMesh = new THREE.Mesh(fGeo, M.floor);
+  fMesh.position.set(mid.x, 0.1, mid.z);
+  fMesh.rotation.y = ang;
+  fMesh.receiveShadow = true;
+  scene.add(fMesh);
 
-// ── 3D box helper (isometric look on top-down canvas) ────────────
-function box3d(x,y,w,h,depth,topCol,sideCol,frontCol){
-  // top face
-  ctx.fillStyle=topCol;
-  ctx.beginPath(); ctx.rect(x,y,w,h); ctx.fill();
-  // right side
-  ctx.fillStyle=sideCol;
-  ctx.beginPath(); ctx.moveTo(x+w,y); ctx.lineTo(x+w+depth,y-depth*.5); ctx.lineTo(x+w+depth,y+h-depth*.5); ctx.lineTo(x+w,y+h); ctx.closePath(); ctx.fill();
-  // front face
-  ctx.fillStyle=frontCol;
-  ctx.beginPath(); ctx.moveTo(x,y+h); ctx.lineTo(x+w,y+h); ctx.lineTo(x+w+depth,y+h-depth*.5); ctx.lineTo(x+depth,y+h-depth*.5); ctx.closePath(); ctx.fill();
-  // edges
-  ctx.strokeStyle='rgba(0,0,0,.45)'; ctx.lineWidth=scl(.6);
-  ctx.strokeRect(x,y,w,h);
-  ctx.beginPath(); ctx.moveTo(x+w,y); ctx.lineTo(x+w+depth,y-depth*.5); ctx.lineTo(x+w+depth,y+h-depth*.5); ctx.lineTo(x+w,y+h); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x,y+h); ctx.lineTo(x+depth,y+h-depth*.5); ctx.lineTo(x+w+depth,y+h-depth*.5); ctx.stroke();
-}
+  // Side walls
+  [-1, 1].forEach(side => {
+    const wGeo = new THREE.BoxGeometry(0.3, 1.6, usable);
+    const wMesh = new THREE.Mesh(wGeo, M.brick);
+    wMesh.position.set(
+      mid.x + Math.cos(ang)*side*0.95,
+      0.9,
+      mid.z - Math.sin(ang)*side*0.95
+    );
+    wMesh.rotation.y = ang;
+    wMesh.castShadow = true; wMesh.receiveShadow = true;
+    scene.add(wMesh);
+  });
 
-// ── Room furniture ────────────────────────────────────────────────
-function drawFurniture(room,cx,cy,r,t){
-  const s=scl;
-  const p=Math.sin(t*.03)*.5+.5;
-  const c=room.accentColor;
+  // Pipe along tunnel wall
+  const pGeo = new THREE.CylinderGeometry(0.09, 0.09, usable, 8);
+  const pMat = new THREE.MeshStandardMaterial({color:0x4a3010, roughness:0.8, metalness:0.25});
+  const pipe = new THREE.Mesh(pGeo, pMat);
+  pipe.position.set(mid.x + Math.cos(ang)*0.7, 1.4, mid.z - Math.sin(ang)*0.7);
+  pipe.rotation.set(0, ang, Math.PI/2);
+  scene.add(pipe);
+});
 
-  switch(room.key){
-    case 'hub':{
-      // Sewer channel — long oval water feature
-      ctx.fillStyle='#0a1828';
-      ctx.beginPath(); ctx.ellipse(cx,cy+s(30),s(100),s(48),0,0,Math.PI*2); ctx.fill();
-      // Water surface shimmer layers
-      for(let i=0;i<4;i++){
-        ctx.strokeStyle=`rgba(20,90,150,${.12+i*.04+p*.06})`; ctx.lineWidth=s(1.2);
-        ctx.beginPath();
-        ctx.moveTo(cx-s(80+i*3),cy+s(18+i*7));
-        ctx.bezierCurveTo(cx-s(30),cy+s(12+i*7),cx+s(30),cy+s(42+i*7),cx+s(80+i*3),cy+s(18+i*7));
-        ctx.stroke();
-      }
-      // Manhole above
-      ctx.fillStyle='#1e1608';
-      ctx.beginPath(); ctx.arc(cx,cy-s(80),s(35),0,Math.PI*2); ctx.fill();
-      // Manhole ring detail
-      ctx.strokeStyle='#a08030'; ctx.lineWidth=s(4);
-      ctx.beginPath(); ctx.arc(cx,cy-s(80),s(33),0,Math.PI*2); ctx.stroke();
-      ctx.strokeStyle='#605020'; ctx.lineWidth=s(2);
-      for(let a=0;a<Math.PI*2;a+=Math.PI/4){
-        ctx.beginPath(); ctx.moveTo(cx,cy-s(80));
-        ctx.lineTo(cx+Math.cos(a)*s(33),cy-s(80)+Math.sin(a)*s(33)); ctx.stroke();
-      }
-      ctx.beginPath(); ctx.arc(cx,cy-s(80),s(15),0,Math.PI*2); ctx.stroke();
-      // Manhole light shaft
-      const mhl=ctx.createRadialGradient(cx,cy-s(80),0,cx,cy-s(80),s(80));
-      mhl.addColorStop(0,`rgba(255,230,120,${.18+p*.08})`);
-      mhl.addColorStop(.4,`rgba(200,170,80,${.06+p*.03})`);
-      mhl.addColorStop(1,'transparent');
-      ctx.fillStyle=mhl; ctx.beginPath(); ctx.arc(cx,cy-s(80),s(80),0,Math.PI*2); ctx.fill();
-      // Old TV on crate
-      ctx.fillStyle='#1c1408'; ctx.beginPath(); ctx.roundRect(cx-s(130),cy-s(45),s(55),s(40),s(3)); ctx.fill();
-      ctx.fillStyle='#0c0c08'; ctx.beginPath(); ctx.roundRect(cx-s(126),cy-s(41),s(44),s(28),s(2)); ctx.fill();
-      ctx.fillStyle=`rgba(${hexRgb(c)},${.2+p*.3})`;
-      ctx.beginPath(); ctx.roundRect(cx-s(125),cy-s(40),s(42),s(26),s(2)); ctx.fill();
-      // Pipes on wall
-      ctx.strokeStyle='#6a5020'; ctx.lineWidth=s(8);
-      ctx.beginPath(); ctx.moveTo(cx-s(200),cy+s(60)); ctx.lineTo(cx+s(200),cy+s(60)); ctx.stroke();
-      ctx.strokeStyle='#4a3810'; ctx.lineWidth=s(5);
-      ctx.beginPath(); ctx.moveTo(cx-s(200),cy+s(60)); ctx.lineTo(cx+s(200),cy+s(60)); ctx.stroke();
-      // Pipe bolts
-      for(let i=-3;i<=3;i++){
-        ctx.fillStyle='#3a2808';
-        ctx.beginPath(); ctx.arc(cx+i*s(60),cy+s(60),s(4),0,Math.PI*2); ctx.fill();
-        ctx.strokeStyle='#6a5020'; ctx.lineWidth=s(1.5);
-        ctx.beginPath(); ctx.arc(cx+i*s(60),cy+s(60),s(4),0,Math.PI*2); ctx.stroke();
-      }
-      // Pizza box on crate
-      ctx.fillStyle='#3a2010'; ctx.beginPath(); ctx.roundRect(cx+s(90),cy-s(10),s(50),s(50),s(2)); ctx.fill();
-      ctx.fillStyle='#2a1808'; ctx.beginPath(); ctx.roundRect(cx+s(92),cy-s(8),s(46),s(5),s(1)); ctx.fill();
-      break;
-    }
-    case 'leo':{
-      // ─ LEO'S DOJO: discipline, training, content filming ─
-      // Tatami mats — grid pattern
-      ctx.save();
-      ctx.beginPath(); ctx.arc(cx,cy,r*.85,0,Math.PI*2); ctx.clip();
-      for(let row=0;row<5;row++) for(let col=0;col<5;col++){
-        const tx=cx-s(90)+col*s(40), ty=cy-s(90)+row*s(40);
-        ctx.fillStyle=row%2===col%2?'#1c140a':'#181008';
-        ctx.fillRect(tx+s(1),ty+s(1),s(38),s(38));
-        ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.lineWidth=s(1);
-        ctx.strokeRect(tx+s(1),ty+s(1),s(38),s(38));
-      }
-      ctx.restore();
+// ââ Ambient Sewer Pipes (crossing the ground) âââââââââââââââââââââ
+[[-5,0,0,40,0],[5,0.15,0,35,0.05],[0,0.25,3,28,Math.PI/2],[0,0.32,-4,22,Math.PI/2]].forEach(([px,py,pz,plen,ra]) => {
+  const pGeo = new THREE.CylinderGeometry(0.14, 0.14, plen, 8);
+  const pMat = new THREE.MeshStandardMaterial({color:0x3a2808, roughness:0.85, metalness:0.3});
+  const p = new THREE.Mesh(pGeo, pMat);
+  p.position.set(px, py + 0.25, pz);
+  p.rotation.set(0, ra, Math.PI/2);
+  scene.add(p);
+});
 
-      // Training dummy (3D cylinder)
-      box3d(cx-s(98),cy-s(25),s(16),s(58),s(6),'#5a3a18','#3a2210','#4a2e14');
-      ctx.fillStyle='#4a2e10';
-      ctx.beginPath(); ctx.ellipse(cx-s(90),cy-s(28),s(14),s(10),0,0,Math.PI*2); ctx.fill();
-      ctx.strokeStyle='#6a4a20'; ctx.lineWidth=s(1.5);
-      ctx.beginPath(); ctx.ellipse(cx-s(90),cy-s(28),s(14),s(10),0,0,Math.PI*2); ctx.stroke();
-      // Dummy arms
-      ctx.strokeStyle='#5a3a18'; ctx.lineWidth=s(5);
-      ctx.beginPath(); ctx.moveTo(cx-s(90)-s(18),cy-s(14)); ctx.lineTo(cx-s(90)+s(18),cy-s(14)); ctx.stroke();
+// ââ Turtle Factory ââââââââââââââââââââââââââââââââââââââââââââââââ
+function mkTurtle(room) {
+  const g = new THREE.Group();
+  const c = room.bandana || 0x888888;
 
-      // Katana rack (3D)
-      box3d(cx+s(68),cy-s(85),s(14),s(78),s(5),'#1a1408','#100e04','#161206');
-      for(let k=0;k<3;k++){
-        ctx.strokeStyle='rgba(190,200,220,.75)'; ctx.lineWidth=s(2);
-        ctx.beginPath(); ctx.moveTo(cx+s(75),cy-s(78)+k*s(24)); ctx.lineTo(cx+s(75)+s(58),cy-s(67)+k*s(24)); ctx.stroke();
-        ctx.fillStyle='#b09030';
-        ctx.beginPath(); ctx.ellipse(cx+s(78),cy-s(76)+k*s(24),s(5),s(3),-.3,0,Math.PI*2); ctx.fill();
-        ctx.strokeStyle='#5a3010'; ctx.lineWidth=s(2.5);
-        ctx.beginPath(); ctx.moveTo(cx+s(75),cy-s(78)+k*s(24)); ctx.lineTo(cx+s(67),cy-s(67)+k*s(24)); ctx.stroke();
-      }
-
-      // ─ Camera/tripod for filming workouts ─
-      const tpx=cx-s(60), tpy=cy+s(30);
-      ctx.strokeStyle='#404850'; ctx.lineWidth=s(2.5);
-      ctx.beginPath(); ctx.moveTo(tpx,tpy-s(35)); ctx.lineTo(tpx-s(18),tpy); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(tpx,tpy-s(35)); ctx.lineTo(tpx+s(18),tpy); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(tpx,tpy-s(35)); ctx.lineTo(tpx,tpy); ctx.stroke();
-      // Camera body (3D box)
-      box3d(tpx-s(14),tpy-s(50),s(28),s(16),s(7),'#252830','#151820','#1e2028');
-      // Camera lens
-      const lensG=ctx.createRadialGradient(tpx+s(10),tpy-s(43),0,tpx+s(10),tpy-s(43),s(7));
-      lensG.addColorStop(0,'#c0d0e0');lensG.addColorStop(.5,'#3a4a60');lensG.addColorStop(1,'#0a0e14');
-      ctx.fillStyle=lensG;ctx.beginPath();ctx.ellipse(tpx+s(10),tpy-s(43),s(7),s(6),0,0,Math.PI*2);ctx.fill();
-      // REC indicator
-      if(p>.5){
-        ctx.fillStyle='#cc1010';ctx.shadowColor='#ff3030';ctx.shadowBlur=s(4);
-        ctx.beginPath();ctx.arc(tpx-s(8),tpy-s(48),s(2.5),0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
-      }
-
-      // ─ Content schedule whiteboard ─
-      box3d(cx+s(55),cy+s(40),s(60),s(40),s(4),'#0a0e14','#060810','#080c12');
-      ctx.fillStyle='#0e1420';ctx.fillRect(cx+s(56),cy+s(41),s(58),s(38));
-      ctx.font=`bold ${s(5)}px Orbitron,monospace`;ctx.textAlign='left';
-      const schedule=['AM: TRAIN+FILM','10AM: EDIT','PM: POST','TOMORROW:','  KATA SERIES'];
-      schedule.forEach((line,i)=>{
-        ctx.fillStyle=i===0?rgba(c,.65):`rgba(${hexRgb(c)},.3)`;
-        ctx.fillText(line,cx+s(59),cy+s(49)+i*s(7));
-      });
-
-      // Candles
-      for(let ci=0;ci<2;ci++){
-        const candleX=cx+s(-30+ci*60), candleY=cy+s(70);
-        ctx.fillStyle='#d4c090';
-        ctx.beginPath(); ctx.roundRect(candleX-s(4),candleY-s(20),s(8),s(20),s(2)); ctx.fill();
-        const fg2=ctx.createRadialGradient(candleX,candleY-s(24),0,candleX,candleY-s(24),s(10));
-        fg2.addColorStop(0,'rgba(255,240,120,.9)');fg2.addColorStop(.4,'rgba(255,120,30,.4)');fg2.addColorStop(1,'transparent');
-        ctx.fillStyle=fg2;ctx.beginPath();ctx.arc(candleX,candleY-s(24),s(10),0,Math.PI*2);ctx.fill();
-      }
-      const lg=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
-      lg.addColorStop(0,rgba(c,.07));lg.addColorStop(1,'transparent');
-      ctx.fillStyle=lg;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
-      break;
-    }
-    case 'don':{
-      // ─ DON'S LAB: invention prototypes, triple monitors, schematics ─
-      // Main workbench (3D box)
-      box3d(cx-s(115),cy-s(22),s(230),s(58),s(8),'#140a1e','#0c0614','#1a0c28');
-
-      // Triple monitors on bench back
-      for(let i=0;i<3;i++){
-        const mx=cx-s(80)+i*s(72), my=cy-s(88);
-        // Monitor 3D body
-        box3d(mx-s(28),my-s(26),s(56),s(36),s(5),'#0a0614','#060410','#0e0818');
-        // Screen glow
-        const screenCols=['#001a33','#1a0033','#001a33'];
-        ctx.fillStyle=screenCols[i]; ctx.beginPath(); ctx.roundRect(mx-s(24),my-s(23),s(48),s(30),s(2)); ctx.fill();
-        // Code / UI on screens
-        if(i===0){
-          // Code editor
-          for(let l=0;l<5;l++){const ll=s(10+Math.sin(l*1.8+t*.015)*10);ctx.fillStyle=`rgba(${hexRgb(c)},${.25+p*.2})`;ctx.fillRect(mx-s(21),my-s(20)+l*s(5),ll,s(2));}
-          ctx.fillStyle=`rgba(${hexRgb(c)},.5)`;ctx.fillRect(mx-s(21),my-s(18),s(6),s(2));
-        } else if(i===1){
-          // Wireframe prototype mock
-          ctx.strokeStyle=rgba(c,.5);ctx.lineWidth=s(1);
-          ctx.strokeRect(mx-s(16),my-s(18),s(32),s(22));
-          ctx.strokeRect(mx-s(10),my-s(14),s(20),s(8));
-          for(let l=0;l<3;l++){ctx.beginPath();ctx.moveTo(mx-s(12),my-s(4)+l*s(4));ctx.lineTo(mx+s(12),my-s(4)+l*s(4));ctx.stroke();}
-        } else {
-          // Analytics graph
-          ctx.strokeStyle=rgba(c,.6);ctx.lineWidth=s(1.5);
-          ctx.beginPath();const pts=[0,8,5,14,3,18,10,12,8,20];
-          pts.forEach((v,i)=>{const gx=mx-s(20)+i*s(4.5),gy=my-s(4)-s(v*.6);i===0?ctx.moveTo(gx,gy):ctx.lineTo(gx,gy);});ctx.stroke();
-        }
-        // Stand
-        ctx.fillStyle='#1a0e28';ctx.beginPath();ctx.roundRect(mx-s(5),my+s(10),s(10),s(14),s(2));ctx.fill();
-      }
-
-      // ─ INVENTION PROTOTYPES on floor (3 iteration models) ─
-      const protoColors=['#1a0a28','#200c30','#28103a'];
-      const protoLabels=['v1','v2','v3 ►'];
-      for(let pv=0;pv<3;pv++){
-        const px=cx-s(100)+pv*s(70), py=cy+s(45);
-        const ht=s(22+pv*6); // each version slightly taller = evolving
-        box3d(px-s(16),py-ht,s(32),ht,s(6),protoColors[pv],shade(protoColors[pv],-10),shade(protoColors[pv],-20));
-        // Glow top on latest prototype
-        if(pv===2){
-          const pg=ctx.createRadialGradient(px,py-ht,0,px,py-ht,s(20));
-          pg.addColorStop(0,rgba(c,.25+p*.15));pg.addColorStop(1,'transparent');
-          ctx.fillStyle=pg;ctx.beginPath();ctx.arc(px,py-ht,s(20),0,Math.PI*2);ctx.fill();
-        }
-        // Label
-        ctx.fillStyle=rgba(c,.55);ctx.font=`bold ${s(8)}px Orbitron,monospace`;ctx.textAlign='center';
-        ctx.fillText(protoLabels[pv],px,py+s(8));
-      }
-
-      // ─ Schematic blueprints pinned to back wall ─
-      for(let bp=0;bp<2;bp++){
-        const bpx=cx+s(70+bp*45),bpy=cy-s(80);
-        ctx.fillStyle='#0c0818';ctx.beginPath();ctx.roundRect(bpx-s(18),bpy-s(28),s(36),s(42),s(1));ctx.fill();
-        ctx.strokeStyle=rgba(c,.3);ctx.lineWidth=s(.8);
-        ctx.beginPath();ctx.roundRect(bpx-s(18),bpy-s(28),s(36),s(42),s(1));ctx.stroke();
-        // Blueprint lines
-        ctx.strokeStyle=rgba(c,.2);ctx.lineWidth=s(.6);
-        ctx.strokeRect(bpx-s(12),bpy-s(22),s(24),s(30));
-        for(let bl=0;bl<4;bl++){ctx.beginPath();ctx.moveTo(bpx-s(12),bpy-s(18)+bl*s(7));ctx.lineTo(bpx+s(12),bpy-s(18)+bl*s(7));ctx.stroke();}
-        ctx.beginPath();ctx.arc(bpx,bpy-s(8),s(8),0,Math.PI*2);ctx.stroke();
-      }
-
-      // ─ Cables spaghetti ─
-      ctx.strokeStyle='rgba(40,20,60,.7)';ctx.lineWidth=s(2.5);
-      for(let i=0;i<5;i++){ctx.beginPath();ctx.moveTo(cx-s(90)+i*s(40),cy-s(22));ctx.bezierCurveTo(cx-s(80)+i*s(40),cy+s(10),cx-s(70)+i*s(40),cy-s(5),cx-s(55)+i*s(40),cy+s(15));ctx.stroke();}
-
-      // ─ Glow ─
-      const dg=ctx.createRadialGradient(cx,cy-s(50),0,cx,cy-s(50),r*.7);
-      dg.addColorStop(0,rgba(c,.07));dg.addColorStop(1,'transparent');
-      ctx.fillStyle=dg;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
-      break;
-    }
-    case 'raph':{
-      // Rubber floor mats
-      ctx.save();
-      ctx.beginPath(); ctx.arc(cx,cy,r*.88,0,Math.PI*2); ctx.clip();
-      ctx.fillStyle='#180808';
-      ctx.fillRect(cx-r,cy-r,r*2,r*2);
-      ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.lineWidth=s(1.5);
-      for(let i=-6;i<=6;i++) for(let j=-6;j<=6;j++){
-        ctx.strokeRect(cx+i*s(30),cy+j*s(30),s(30),s(30));
-      }
-      ctx.restore();
-      // Heavy bag
-      const bagSway=Math.sin(t*.04)*s(3);
-      ctx.strokeStyle='#4a2a08'; ctx.lineWidth=s(3);
-      ctx.beginPath(); ctx.moveTo(cx-s(80)+bagSway,cy-s(90)); ctx.lineTo(cx-s(80)+bagSway,cy-s(70)); ctx.stroke();
-      const bagGrad=ctx.createLinearGradient(cx-s(95)+bagSway,0,cx-s(65)+bagSway,0);
-      bagGrad.addColorStop(0,'#300808'); bagGrad.addColorStop(.4,'#5a1010'); bagGrad.addColorStop(1,'#300808');
-      ctx.fillStyle=bagGrad;
-      ctx.beginPath(); ctx.roundRect(cx-s(96)+bagSway,cy-s(70),s(32),s(60),s(8)); ctx.fill();
-      // Tape strips
-      ctx.strokeStyle=rgba(c,.5); ctx.lineWidth=s(3);
-      for(let ti=0;ti<3;ti++){
-        ctx.beginPath(); ctx.moveTo(cx-s(96)+bagSway,cy-s(60)+ti*s(18)); ctx.lineTo(cx-s(64)+bagSway,cy-s(60)+ti*s(18)); ctx.stroke();
-      }
-      // Barbell rack
-      ctx.fillStyle='#1e1010';
-      ctx.beginPath(); ctx.roundRect(cx+s(40),cy-s(20),s(10),s(80),s(3)); ctx.fill();
-      ctx.beginPath(); ctx.roundRect(cx+s(90),cy-s(20),s(10),s(80),s(3)); ctx.fill();
-      // Barbell bar
-      ctx.strokeStyle='#707888'; ctx.lineWidth=s(5);
-      ctx.beginPath(); ctx.moveTo(cx+s(45),cy+s(30)); ctx.lineTo(cx+s(95),cy+s(30)); ctx.stroke();
-      // Weight plates
-      for(let wi=0;wi<2;wi++){
-        const wx=cx+s(43+wi*50);
-        const wg=ctx.createRadialGradient(wx,cy+s(30),0,wx,cy+s(30),s(16));
-        wg.addColorStop(0,'#505060'); wg.addColorStop(.6,'#303040'); wg.addColorStop(1,'#202030');
-        ctx.fillStyle=wg;
-        ctx.beginPath(); ctx.ellipse(wx,cy+s(30),s(7),s(16),0,0,Math.PI*2); ctx.fill();
-        ctx.strokeStyle='#404050'; ctx.lineWidth=s(1);
-        ctx.beginPath(); ctx.ellipse(wx,cy+s(30),s(7),s(16),0,0,Math.PI*2); ctx.stroke();
-      }
-      // Brand mood board
-      box3d(cx-s(25),cy-s(85),s(50),s(40),s(5),'#1e0c0c','#150808','#1a0a0a');
-      const swatchCols=['#cc2222','#1a1a1a','#e8e8e8','#3a1a1a'];
-      for(let sw=0;sw<4;sw++){ctx.fillStyle=swatchCols[sw];ctx.beginPath();ctx.roundRect(cx-s(22)+sw*s(12),cy-s(80),s(10),s(28),s(1));ctx.fill();}
-      ctx.fillStyle=rgba(c,.6);ctx.font=`bold ${s(6)}px Orbitron,monospace`;ctx.textAlign='center';
-      ctx.fillText('ATHLETIC WEAR',cx,cy-s(44));
-      // Sample shirt hanging
-      const shirtX=cx-s(95),shirtY=cy+s(48);
-      ctx.strokeStyle=rgba(c,.5);ctx.lineWidth=s(2);
-      ctx.beginPath();ctx.moveTo(shirtX-s(12),shirtY-s(18));ctx.lineTo(shirtX-s(22),shirtY-s(8));ctx.lineTo(shirtX-s(18),shirtY-s(8));ctx.lineTo(shirtX-s(18),shirtY+s(14));ctx.lineTo(shirtX+s(18),shirtY+s(14));ctx.lineTo(shirtX+s(18),shirtY-s(8));ctx.lineTo(shirtX+s(22),shirtY-s(8));ctx.lineTo(shirtX+s(12),shirtY-s(18));ctx.closePath();ctx.stroke();
-      ctx.fillStyle=rgba(c,.08);ctx.fill();
-      break;
-    }
-    case 'mikey':{
-      // Graffiti-style colourful floor
-      ctx.save();
-      ctx.beginPath(); ctx.arc(cx,cy,r*.9,0,Math.PI*2); ctx.clip();
-      // Paint splatter marks
-      for(let sp=0;sp<8;sp++){
-        const sx=cx+(Math.random()-.5)*r*1.4, sy=cy+(Math.random()-.5)*r*1.4;
-        const sg=ctx.createRadialGradient(sx,sy,0,sx,sy,s(20+Math.random()*30));
-        const cols=['#c83000','#0040c8','#c8a000','#008840'];
-        sg.addColorStop(0,rgba(cols[sp%4],.08)); sg.addColorStop(1,'transparent');
-        ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(sx,sy,s(30),0,Math.PI*2); ctx.fill();
-      }
-      ctx.restore();
-      // 3D Easel with canvas
-      box3d(cx+s(28),cy-s(72),s(54),s(62),s(6),'#1a1510','#110e0a','#161209');
-      ctx.strokeStyle='#6a4820'; ctx.lineWidth=s(4);
-      ctx.beginPath(); ctx.moveTo(cx+s(55),cy-s(72)); ctx.lineTo(cx+s(38),cy+s(52)); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx+s(55),cy-s(72)); ctx.lineTo(cx+s(78),cy+s(52)); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx+s(41),cy+s(22)); ctx.lineTo(cx+s(74),cy+s(22)); ctx.stroke();
-      // Painting in progress — abstract expressionist
-      const paintColors=['#cc3300','#dd8800','#2255cc','#228833','#cc22aa'];
-      for(let pi=0;pi<8;pi++){
-        ctx.fillStyle=rgba(paintColors[pi%5],.25+p*.2);
-        ctx.beginPath();
-        ctx.ellipse(cx+s(42+Math.sin(pi*1.2)*16),cy-s(50+Math.cos(pi*.9)*18),s(9+pi*2.5),s(5+pi),pi*.7,0,Math.PI*2);
-        ctx.fill();
-      }
-      // Gallery wall — multiple framed canvases
-      const frames=[{x:-s(80),y:-s(80),w:s(36),h:s(28)},{x:-s(75),y:-s(44),w:s(26),h:s(22)},{x:-s(110),y:-s(76),w:s(24),h:s(30)}];
-      frames.forEach((f,fi)=>{
-        box3d(cx+f.x,cy+f.y,f.w,f.h,s(3),'#1a1510','#110e0a','#161209');
-        const fc=paintColors[fi%5];
-        ctx.fillStyle=rgba(fc,.2); ctx.fillRect(cx+f.x+s(3),cy+f.y+s(3),f.w-s(6),f.h-s(6));
-        ctx.strokeStyle=rgba(fc,.5); ctx.lineWidth=s(1);
-        ctx.strokeRect(cx+f.x+s(2),cy+f.y+s(2),f.w-s(4),f.h-s(4));
-      });
-      // 3D Pizza box stack
-      for(let pb=3;pb>=0;pb--){
-        box3d(cx-s(112),cy+s(28+pb*9),s(52),s(8),s(4),pb%2===0?'#3a2010':'#2a1808',pb%2===0?'#2a1808':'#1e1206','#1a1006');
-        ctx.fillStyle=rgba('#dd7700',.12); ctx.font=`${s(5)}px monospace`; ctx.textAlign='center';
-        ctx.fillText('🍕',cx-s(86),cy+s(35+pb*9));
-      }
-      // 3D Speakers with waveform
-      for(let sp=0;sp<2;sp++){
-        const spx=cx+s(-118+sp*236);
-        box3d(spx-s(18),cy-s(22),s(36),s(44),s(6),'#151008','#0e0a04','#100c06');
-        ctx.strokeStyle=rgba(c,0.25+Math.abs(Math.sin(t*.05+sp))*.35); ctx.lineWidth=s(2);
-        ctx.beginPath(); ctx.arc(spx,cy-s(6),s(12),0,Math.PI*2); ctx.stroke();
-        ctx.beginPath(); ctx.arc(spx,cy+s(12),s(6),0,Math.PI*2); ctx.stroke();
-        // Waveform bars
-        for(let wb=0;wb<5;wb++){
-          const wh=s(4+Math.abs(Math.sin(t*.08+sp+wb*.8))*10);
-          ctx.fillStyle=rgba(c,.3+Math.abs(Math.sin(t*.08+sp+wb*.8))*.4);
-          ctx.fillRect(spx-s(10)+wb*s(5),cy+s(20)-wh*.5,s(3),wh);
-        }
-      }
-      break;
-    }
-    case 'splinter':{
-      // Stone floor pattern
-      ctx.save();
-      ctx.beginPath(); ctx.arc(cx,cy,r*.9,0,Math.PI*2); ctx.clip();
-      ctx.fillStyle='#080c06';
-      ctx.fillRect(cx-r,cy-r,r*2,r*2);
-      for(let si=0;si<12;si++){
-        const sa=(si/12)*Math.PI*2, sr=s(30+si*15);
-        ctx.strokeStyle=`rgba(0,0,0,${.2+si*.01})`; ctx.lineWidth=s(1.5);
-        ctx.beginPath(); ctx.arc(cx,cy,sr,sa,sa+Math.PI*.4); ctx.stroke();
-      }
-      ctx.restore();
-      // 3D Meditation platform / raised dais
-      box3d(cx-s(55),cy+s(0),s(110),s(55),s(8),'#1a2010','#101808','#141e0e');
-      const rugGrad=ctx.createRadialGradient(cx,cy+s(28),0,cx,cy+s(28),s(48));
-      rugGrad.addColorStop(0,'#203018'); rugGrad.addColorStop(1,'#101808');
-      ctx.fillStyle=rugGrad;
-      ctx.beginPath(); ctx.ellipse(cx,cy+s(28),s(45),s(28),0,0,Math.PI*2); ctx.fill();
-      ctx.strokeStyle='rgba(80,140,40,.5)'; ctx.lineWidth=s(1.5);
-      ctx.beginPath(); ctx.ellipse(cx,cy+s(28),s(43),s(26),0,0,Math.PI*2); ctx.stroke();
-      ctx.beginPath(); ctx.ellipse(cx,cy+s(28),s(30),s(18),0,0,Math.PI*2); ctx.stroke();
-      // 3D Map table
-      box3d(cx-s(62),cy-s(88),s(124),s(60),s(10),'#0e1408','#080e04','#0a1006');
-      ctx.strokeStyle='rgba(60,100,30,.6)'; ctx.lineWidth=s(2);
-      ctx.beginPath(); ctx.rect(cx-s(58),cy-s(85),s(116),s(54)); ctx.stroke();
-      // Tactical map grid
-      ctx.strokeStyle=rgba(c,.12); ctx.lineWidth=s(.8);
-      for(let mg=0;mg<6;mg++){
-        ctx.beginPath(); ctx.moveTo(cx-s(58)+mg*s(20),cy-s(85)); ctx.lineTo(cx-s(58)+mg*s(20),cy-s(31)); ctx.stroke();
-      }
-      for(let mg=0;mg<4;mg++){
-        ctx.beginPath(); ctx.moveTo(cx-s(58),cy-s(85)+mg*s(18)); ctx.lineTo(cx+s(58),cy-s(85)+mg*s(18)); ctx.stroke();
-      }
-      // Tactical pins on map
-      const pins=[{px:-30,py:-72,col:'#ff2222'},{px:10,py:-60,col:'#ffaa00'},{px:-10,py:-48,col:'#2266cc'},{px:30,py:-66,col:'#ff2222'}];
-      pins.forEach(pin=>{
-        ctx.fillStyle=pin.col; ctx.beginPath(); ctx.arc(cx+s(pin.px),cy+s(pin.py),s(3),0,Math.PI*2); ctx.fill();
-        ctx.strokeStyle='rgba(255,255,255,.4)'; ctx.lineWidth=s(.5);
-        ctx.beginPath(); ctx.moveTo(cx+s(pin.px),cy+s(pin.py)); ctx.lineTo(cx+s(pin.px+4),cy+s(pin.py-10)); ctx.stroke();
-      });
-      // Battle plans scroll
-      box3d(cx+s(75),cy-s(20),s(42),s(55),s(5),'#0f1a08','#0a1204','#0d1806');
-      ctx.fillStyle=rgba(c,.3); ctx.font=`${s(5)}px Orbitron,monospace`; ctx.textAlign='left';
-      ['PHASE I','PHASE II','EXECUTE'].forEach((ln,li)=>{
-        ctx.fillText(ln,cx+s(78),cy+s(-10+li*14));
-        ctx.fillStyle=rgba(c,.15); ctx.fillRect(cx+s(78),cy+s(-6+li*14),s(35),s(1));
-        ctx.fillStyle=rgba(c,.3);
-      });
-      // Incense with animated smoke
-      for(let ic=0;ic<3;ic++){
-        const icx=cx+s(-25+ic*25), icy=cy+s(5);
-        ctx.strokeStyle='#8a6030'; ctx.lineWidth=s(1.5);
-        ctx.beginPath(); ctx.moveTo(icx,icy); ctx.lineTo(icx+s(2),icy-s(25)); ctx.stroke();
-        ctx.strokeStyle=`rgba(180,150,100,${.1+p*.08})`; ctx.lineWidth=s(1);
-        const st=t*.015+ic;
-        ctx.beginPath();
-        ctx.moveTo(icx+s(2),icy-s(25));
-        ctx.bezierCurveTo(icx+s(2)+Math.sin(st)*s(7),icy-s(37),icx+s(2)-Math.sin(st+1)*s(9),icy-s(50),icx+s(2)+Math.sin(st+2)*s(6),icy-s(63));
-        ctx.stroke();
-      }
-      const sg2=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
-      sg2.addColorStop(0,rgba(c,.07)); sg2.addColorStop(1,'transparent');
-      ctx.fillStyle=sg2; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
-      break;
-    }
-  }
-}
-
-// ── Draw a Turtle (top-down, realistic curved) ────────────────────
-function drawTurtle(x,y,room,walkPhase,buildPhase,opacity,isWorking){
-  if(opacity<=0) return;
-  const {sx,sy}=ws(x,y);
-  const sc=scl(20);
-  const bandana=room.bandana;
-  const isSplinter=room.isSplinter||false;
-
-  ctx.save();
-  ctx.globalAlpha=opacity;
-  ctx.translate(sx,sy);
-
-  const bob=Math.abs(Math.sin(walkPhase*4))*sc*.04;
-
-  if(isSplinter){
-    // ── SPLINTER — RAT ─────────────────────────────────────────
-    const rs=sc*1.05;
-
-    // Shadow
-    ctx.fillStyle='rgba(0,0,0,.35)';
-    ctx.beginPath(); ctx.ellipse(0,rs*.1,rs*.7,rs*.28,0,0,Math.PI*2); ctx.fill();
-
-    // Robe / body (hunched rat shape)
-    const robeG=ctx.createRadialGradient(-rs*.1,-rs*.05,0,0,0,rs*.85);
-    robeG.addColorStop(0,'#2e3820'); robeG.addColorStop(.6,'#1e2814'); robeG.addColorStop(1,'#101408');
-    ctx.fillStyle=robeG;
-    ctx.beginPath(); ctx.ellipse(0,0,rs*.72,rs*.78,0,0,Math.PI*2); ctx.fill();
-    // Robe detail lines
-    ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.lineWidth=rs*.04;
-    ctx.beginPath(); ctx.moveTo(0,-rs*.4); ctx.lineTo(-rs*.1,rs*.4); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0,-rs*.4); ctx.lineTo(rs*.1,rs*.4); ctx.stroke();
-
-    // Paws (small, dark)
-    for(let pi=0;pi<4;pi++){
-      const pa=(pi/4)*Math.PI*2+Math.PI*.125;
-      const pw=pi%2===0?Math.sin(walkPhase*4)*.08:-Math.sin(walkPhase*4)*.08;
-      ctx.fillStyle='#5a4030';
-      ctx.beginPath(); ctx.ellipse(Math.cos(pa)*rs*.68,Math.sin(pa)*rs*.65+pw*rs,rs*.13,rs*.16,pa,0,Math.PI*2); ctx.fill();
-    }
-
-    // Tail
-    ctx.strokeStyle='#5a4030'; ctx.lineWidth=rs*.08;
-    ctx.beginPath();
-    ctx.moveTo(rs*.3,rs*.5);
-    ctx.bezierCurveTo(rs*.6,rs*.7,rs*.9,rs*.4,rs*.85,-rs*.1);
-    ctx.stroke();
-    ctx.strokeStyle='#4a3020'; ctx.lineWidth=rs*.04;
-    ctx.beginPath();
-    ctx.moveTo(rs*.3,rs*.5);
-    ctx.bezierCurveTo(rs*.6,rs*.7,rs*.9,rs*.4,rs*.85,-rs*.1);
-    ctx.stroke();
-
-    // Head — elongated snout
-    ctx.save();
-    ctx.translate(0,-rs*.85);
-
-    // Ears (round, on top)
-    for(let e=0;e<2;e++){
-      const ex=(e-.5)*rs*.5;
-      ctx.fillStyle='#5a4030';
-      ctx.beginPath(); ctx.arc(ex,-rs*.1,rs*.18,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle='#8a5040';
-      ctx.beginPath(); ctx.arc(ex,-rs*.1,rs*.1,0,Math.PI*2); ctx.fill();
-    }
-
-    // Skull
-    const headG=ctx.createRadialGradient(-rs*.08,-rs*.05,0,0,0,rs*.4);
-    headG.addColorStop(0,'#6a5040'); headG.addColorStop(.5,'#4a3828'); headG.addColorStop(1,'#302418');
-    ctx.fillStyle=headG;
-    ctx.beginPath(); ctx.ellipse(0,-rs*.02,rs*.36,rs*.32,0,0,Math.PI*2); ctx.fill();
-
-    // Snout (elongated forward — pointing down in top-down)
-    ctx.fillStyle='#5a4030';
-    ctx.beginPath();
-    ctx.ellipse(0,rs*.22,rs*.22,rs*.3,.0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#4a3020';
-    ctx.beginPath();
-    ctx.ellipse(0,rs*.28,rs*.18,rs*.24,0,0,Math.PI*2); ctx.fill();
-
-    // Nose (pink, tip of snout)
-    ctx.fillStyle='#c87070';
-    ctx.beginPath(); ctx.ellipse(0,rs*.43,rs*.09,rs*.07,0,0,Math.PI*2); ctx.fill();
-
-    // Nostrils
-    ctx.fillStyle='rgba(0,0,0,.5)';
-    ctx.beginPath(); ctx.ellipse(-rs*.04,rs*.44,rs*.03,rs*.025,0,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(rs*.04,rs*.44,rs*.03,rs*.025,0,0,Math.PI*2); ctx.fill();
-
-    // Whiskers
-    ctx.strokeStyle='rgba(220,200,170,.55)'; ctx.lineWidth=rs*.018;
-    for(let w=0;w<3;w++){
-      const wy=rs*(.25+w*.07);
-      ctx.beginPath(); ctx.moveTo(-rs*.1,wy); ctx.lineTo(-rs*.55,wy-rs*(.05-w*.02)); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(rs*.1,wy);  ctx.lineTo(rs*.55,wy-rs*(.05-w*.02));  ctx.stroke();
-    }
-
-    // Eyes (beady, dark, with green glow)
-    ctx.fillStyle='#c0a070';
-    ctx.beginPath(); ctx.ellipse(-rs*.14,rs*.05,rs*.06,rs*.055,0,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(rs*.14,rs*.05,rs*.06,rs*.055,0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#1a1008';
-    ctx.beginPath(); ctx.ellipse(-rs*.14,rs*.05,rs*.04,rs*.038,0,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(rs*.14,rs*.05,rs*.04,rs*.038,0,0,Math.PI*2); ctx.fill();
-    // Eye gleam
-    ctx.fillStyle='rgba(180,220,100,.7)';
-    ctx.shadowColor='#449933'; ctx.shadowBlur=rs*.4;
-    ctx.beginPath(); ctx.arc(-rs*.12,rs*.03,rs*.015,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(rs*.12,rs*.03,rs*.015,0,Math.PI*2); ctx.fill();
-    ctx.shadowBlur=0;
-
-    // Robes collar visible around head
-    ctx.strokeStyle='rgba(40,55,25,.6)'; ctx.lineWidth=rs*.06;
-    ctx.beginPath(); ctx.arc(0,0,rs*.3,Math.PI*.6,Math.PI*2.4); ctx.stroke();
-
-    ctx.restore();
-
+  if (room.isSplinter) {
+    // Robe body
+    const bodyGeo = new THREE.SphereGeometry(0.52, 12, 8);
+    const body = new THREE.Mesh(bodyGeo, new THREE.MeshStandardMaterial({color:0x2e3820, roughness:0.9}));
+    body.scale.y = 0.78;
+    body.position.y = 0.52;
+    g.add(body);
+    // Head
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8),
+      new THREE.MeshStandardMaterial({color:0x5a4030, roughness:0.8}));
+    head.position.set(0, 1.12, 0.08);
+    g.add(head);
+    // Snout
+    const snout = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6),
+      new THREE.MeshStandardMaterial({color:0x4a3020, roughness:0.85}));
+    snout.scale.set(1, 0.7, 1.2);
+    snout.position.set(0, 1.06, 0.38);
+    g.add(snout);
+    // Ears
+    [-1,1].forEach(s => {
+      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6),
+        new THREE.MeshStandardMaterial({color:0x5a4030, roughness:0.8}));
+      ear.position.set(s*0.22, 1.36, 0.02);
+      g.add(ear);
+      const innerEar = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5),
+        new THREE.MeshStandardMaterial({color:0x8a5040, roughness:0.8}));
+      innerEar.position.set(s*0.22, 1.36, 0.08);
+      g.add(innerEar);
+    });
+    // Eyes (glowing)
+    [-1,1].forEach(s => {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 6),
+        new THREE.MeshStandardMaterial({color:0x88ff44, emissive:0x44ff00, emissiveIntensity:1.2}));
+      eye.position.set(s*0.1, 1.14, 0.36);
+      g.add(eye);
+    });
     // Staff
-    ctx.strokeStyle='#6a4818'; ctx.lineWidth=rs*.1;
-    ctx.beginPath(); ctx.moveTo(-rs*.3,rs*.6); ctx.lineTo(rs*.4,-rs*.85); ctx.stroke();
-    ctx.fillStyle='#8a6020';
-    ctx.beginPath(); ctx.arc(rs*.4,-rs*.85,rs*.1,0,Math.PI*2); ctx.fill();
-
+    const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.025, 1.9, 6),
+      new THREE.MeshStandardMaterial({color:0x6a4818, roughness:0.8}));
+    staff.position.set(0.32, 0.82, -0.08);
+    staff.rotation.z = 0.28;
+    g.add(staff);
+    // Robe details (simple vertical cylinder stripes)
+    const robe = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.52, 0.7, 16),
+      new THREE.MeshStandardMaterial({color:0x1e2814, roughness:0.9}));
+    robe.position.y = 0.38;
+    g.add(robe);
   } else {
-    // ── TURTLE ───────────────────────────────────────────────────
-    const ts=sc;
+    // Shell (flattened sphere)
+    const shellGeo = new THREE.SphereGeometry(0.52, 14, 10);
+    const shell = new THREE.Mesh(shellGeo, M.shell);
+    shell.scale.y = 0.52;
+    shell.position.y = 0.48;
+    g.add(shell);
 
-    // Shadow
-    ctx.fillStyle='rgba(0,0,0,.38)';
-    ctx.beginPath(); ctx.ellipse(0,ts*.12,ts*.65,ts*.28,0,0,Math.PI*2); ctx.fill();
+    // Shell ridge lines (dark torus rings) - 2 cross rings
+    const ridgeMat = new THREE.MeshStandardMaterial({color:0x1a1208, roughness:0.9});
+    [0, Math.PI/2].forEach(ra => {
+      const ridge = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.025, 6, 18), ridgeMat);
+      ridge.scale.y = 0.52;
+      ridge.position.y = 0.48;
+      ridge.rotation.y = ra;
+      g.add(ridge);
+    });
 
-    // Shell — detailed with hexagonal scutes
-    const shellG=ctx.createRadialGradient(-ts*.12,-ts*.08,0,0,0,ts*.88);
-    shellG.addColorStop(0,'#6a5220');
-    shellG.addColorStop(.45,'#4a3a12');
-    shellG.addColorStop(.8,'#2e2408');
-    shellG.addColorStop(1,'#1a1404');
-    ctx.fillStyle=shellG;
-    ctx.beginPath(); ctx.ellipse(0,0,ts*.76,ts*.82,0,0,Math.PI*2); ctx.fill();
-
-    // Shell scute pattern (hexagon-ish segments)
-    ctx.strokeStyle='rgba(0,0,0,.55)'; ctx.lineWidth=ts*.06;
-    // Center scute
-    ctx.beginPath(); ctx.ellipse(0,-ts*.1,ts*.28,ts*.3,0,0,Math.PI*2); ctx.stroke();
-    // Ring of 5 scutes
-    for(let i=0;i<5;i++){
-      const sa=(i/5)*Math.PI*2-Math.PI*.5;
-      ctx.beginPath(); ctx.ellipse(Math.cos(sa)*ts*.44,Math.sin(sa)*ts*.44+ts*.05,ts*.18,ts*.2,sa,0,Math.PI*2); ctx.stroke();
-    }
-    // Shell rim
-    ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.lineWidth=ts*.04;
-    ctx.beginPath(); ctx.ellipse(0,0,ts*.73,ts*.79,0,0,Math.PI*2); ctx.stroke();
-
-    // Limbs around shell
-    ctx.fillStyle='#3a7820';
-    for(let li=0;li<4;li++){
-      const la=(li/4)*Math.PI*2+Math.PI*.125;
-      const lswing=li%2===0?Math.sin(walkPhase*4):.12:-Math.sin(walkPhase*4)*.12;
-      ctx.beginPath();
-      ctx.ellipse(Math.cos(la)*ts*.73,Math.sin(la)*ts*.74+lswing*ts,ts*.19,ts*.24,la,0,Math.PI*2);
-      ctx.fill();
-      // Claw details
-      ctx.strokeStyle='#2a5a10'; ctx.lineWidth=ts*.025;
-      ctx.beginPath(); ctx.ellipse(Math.cos(la)*ts*.73,Math.sin(la)*ts*.74+lswing*ts,ts*.17,ts*.22,la,0,Math.PI*2); ctx.stroke();
-    }
-
-    // Neck
-    const neckG=ctx.createRadialGradient(0,-ts*.55,0,0,-ts*.55,ts*.18);
-    neckG.addColorStop(0,'#4a9028'); neckG.addColorStop(1,'#2a5a14');
-    ctx.fillStyle=neckG;
-    ctx.beginPath(); ctx.ellipse(0,-ts*.55,ts*.15,ts*.22,0,0,Math.PI*2); ctx.fill();
+    // Body underside
+    const bodyBot = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.44, 0.28, 16), M.green);
+    bodyBot.position.y = 0.22;
+    g.add(bodyBot);
 
     // Head
-    const headG2=ctx.createRadialGradient(-ts*.1,-ts*.85,0,0,-ts*.85,ts*.38);
-    headG2.addColorStop(0,'#52a030'); headG2.addColorStop(.5,'#3a8020'); headG2.addColorStop(1,'#2a5a14');
-    ctx.fillStyle=headG2;
-    ctx.beginPath(); ctx.ellipse(0,-ts*.84,ts*.34,ts*.32,0,0,Math.PI*2); ctx.fill();
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), M.bodyGreen);
+    head.position.set(0, 0.74, 0.36);
+    g.add(head);
 
-    // Bandana — fabric folds
-    const bandDk=shade(bandana,-35);
-    ctx.fillStyle=bandana;
-    ctx.beginPath(); ctx.roundRect(-ts*.33,-ts*1.02,ts*.66,ts*.18,ts*.04); ctx.fill();
-    // Bandana highlight fold
-    ctx.fillStyle=shade(bandana,20);
-    ctx.beginPath(); ctx.roundRect(-ts*.3,-ts*1.0,ts*.6,ts*.05,ts*.02); ctx.fill();
-    // Bandana shadow fold
-    ctx.fillStyle=bandDk;
-    ctx.beginPath(); ctx.roundRect(-ts*.32,-ts*.88,ts*.64,ts*.04,ts*.02); ctx.fill();
+    // Bandana strip
+    const bandMat = new THREE.MeshStandardMaterial({
+      color:c, emissive:c, emissiveIntensity:0.35, roughness:0.75
+    });
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.09), bandMat);
+    band.position.set(0, 0.8, 0.48);
+    g.add(band);
+    room.bandanaMat = bandMat;
 
-    // Eye holes in bandana
-    ctx.fillStyle='rgba(0,0,0,.7)';
-    ctx.beginPath(); ctx.ellipse(-ts*.11,-ts*.93,ts*.075,ts*.06,0,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(ts*.11,-ts*.93,ts*.075,ts*.06,0,0,Math.PI*2); ctx.fill();
+    // Bandana tails (2 strips hanging back)
+    const tailMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(c).multiplyScalar(0.55).getHex(), roughness:0.8
+    });
+    [-0.12, 0.12].forEach((ox, i) => {
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.16, 0.04), tailMat);
+      tail.position.set(ox, 0.65, 0.26);
+      tail.rotation.z = (i === 0 ? -0.2 : 0.2);
+      g.add(tail);
+    });
 
-    // Eyes — irises with pupils
-    const eyeIrisCol=shade(bandana,30);
-    ctx.fillStyle=eyeIrisCol;
-    ctx.beginPath(); ctx.ellipse(-ts*.11,-ts*.935,ts*.042,ts*.038,0,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(ts*.11,-ts*.935,ts*.042,ts*.038,0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#060808';
-    ctx.beginPath(); ctx.ellipse(-ts*.11,-ts*.935,ts*.022,ts*.022,0,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(ts*.11,-ts*.935,ts*.022,ts*.022,0,0,Math.PI*2); ctx.fill();
-    // Eye shine
-    ctx.fillStyle='rgba(255,255,255,.7)';
-    ctx.beginPath(); ctx.arc(-ts*.1,-ts*.945,ts*.01,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(ts*.12,-ts*.945,ts*.01,0,Math.PI*2); ctx.fill();
-    // Eye glow
-    ctx.shadowColor=bandana; ctx.shadowBlur=ts*.35;
-    ctx.fillStyle=rgba(bandana,.6);
-    ctx.beginPath(); ctx.ellipse(-ts*.11,-ts*.935,ts*.035,ts*.03,0,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(ts*.11,-ts*.935,ts*.035,ts*.03,0,0,Math.PI*2); ctx.fill();
-    ctx.shadowBlur=0;
+    // Eyes (colored irises, glowing)
+    const eyeMat = new THREE.MeshStandardMaterial({color:c, emissive:c, emissiveIntensity:0.75});
+    [-0.09, 0.09].forEach(ex => {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 6), eyeMat);
+      eye.position.set(ex, 0.8, 0.57);
+      g.add(eye);
+    });
 
-    // Bandana tails behind head
-    ctx.fillStyle=bandDk;
-    ctx.beginPath();
-    ctx.moveTo(ts*.07,-ts*.88); ctx.quadraticCurveTo(ts*.28,-ts*.7,ts*.22,-ts*.55);
-    ctx.lineTo(ts*.1,-ts*.56); ctx.quadraticCurveTo(ts*.15,-ts*.72,ts*.0,-ts*.85); ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(ts*.14,-ts*.88); ctx.quadraticCurveTo(ts*.38,-ts*.65,ts*.3,-ts*.5);
-    ctx.lineTo(ts*.18,-ts*.52); ctx.quadraticCurveTo(ts*.22,-ts*.66,ts*.08,-ts*.82); ctx.closePath();
-    ctx.fill();
-
-    // Nostril slits
-    ctx.fillStyle='rgba(0,0,0,.45)';
-    ctx.beginPath(); ctx.ellipse(-ts*.04,-ts*.74,ts*.025,ts*.015,.3,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(ts*.04,-ts*.74,ts*.025,ts*.015,-.3,0,Math.PI*2); ctx.fill();
+    // Limbs (4 small spheres)
+    const limbMat = new THREE.MeshStandardMaterial({color:0x2d6018, roughness:0.9});
+    const LIMB_ANGLES = [
+      Math.PI*0.125, Math.PI*0.875, Math.PI*1.125, Math.PI*1.875
+    ];
+    LIMB_ANGLES.forEach((ang, idx) => {
+      const limb = new THREE.Mesh(new THREE.SphereGeometry(0.13, 7, 6), limbMat);
+      limb.position.set(Math.sin(ang)*0.54, 0.2, Math.cos(ang)*0.54);
+      limb.userData.idx = idx;
+      limb.userData.baseY = 0.2;
+      g.add(limb);
+    });
   }
 
-  // Working indicator
-  if(isWorking){
-    ctx.shadowColor=room.bandana; ctx.shadowBlur=sc*.6;
-    ctx.fillStyle=room.bandana;
-    ctx.font=`${sc*.75}px VT323,monospace`;
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('⚙',0,-sc*(isSplinter?2.1:1.65));
-    ctx.shadowBlur=0;
-  }
+  // Work glow light
+  const workLight = new THREE.PointLight(c, 0, 2.5, 2);
+  workLight.position.y = 1.8;
+  g.add(workLight);
+  g.userData.workLight = workLight;
+  g.userData.room = room;
 
-  ctx.restore();
+  return g;
 }
 
-// ── Draw tunnels ──────────────────────────────────────────────────
-function drawTunnel(tn){
-  const r1=ROOMS.find(r=>r.key===tn.from), r2=ROOMS.find(r=>r.key===tn.to);
-  const p1=ws(r1.cx,r1.cy), p2=ws(r2.cx,r2.cy);
-  const hw=scl(tn.w)*.5;
-  const dx=p2.sx-p1.sx, dy=p2.sy-p1.sy, len=Math.sqrt(dx*dx+dy*dy);
-  const nx=(-dy/len)*hw, ny=(dx/len)*hw;
+// ââ Turtle State Machines âââââââââââââââââââââââââââââââââââââââââ
+const TURTLES = ROOMS.filter(r => r.bandana).map(room => {
+  const group = mkTurtle(room);
+  group.position.set(room.x, 0, room.z);
+  scene.add(group);
+  return {
+    room, group,
+    x: room.x, z: room.z,
+    tx: room.x, tz: room.z,
+    walkPhase: Math.random()*Math.PI*2,
+    state: 'idle',
+    idleTimer: Math.random()*80+20,
+    buildTimer: 0,
+  };
+});
 
-  // Tunnel wall (outer)
-  ctx.fillStyle='#080604';
-  ctx.beginPath();
-  ctx.moveTo(p1.sx+nx*1.2,p1.sy+ny*1.2); ctx.lineTo(p2.sx+nx*1.2,p2.sy+ny*1.2);
-  ctx.lineTo(p2.sx-nx*1.2,p2.sy-ny*1.2); ctx.lineTo(p1.sx-nx*1.2,p1.sy-ny*1.2);
-  ctx.closePath(); ctx.fill();
-
-  // Tunnel floor
-  const tfG=ctx.createLinearGradient(p1.sx,p1.sy,p2.sx,p2.sy);
-  tfG.addColorStop(0,r1.floorColor); tfG.addColorStop(1,r2.floorColor);
-  ctx.fillStyle=tfG;
-  ctx.beginPath();
-  ctx.moveTo(p1.sx+nx,p1.sy+ny); ctx.lineTo(p2.sx+nx,p2.sy+ny);
-  ctx.lineTo(p2.sx-nx,p2.sy-ny); ctx.lineTo(p1.sx-nx,p1.sy-ny);
-  ctx.closePath(); ctx.fill();
-
-  // Wet floor sheen
-  ctx.fillStyle='rgba(255,255,255,.015)';
-  ctx.beginPath();
-  ctx.moveTo(p1.sx+nx*.1,p1.sy+ny*.1); ctx.lineTo(p2.sx+nx*.1,p2.sy+ny*.1);
-  ctx.lineTo(p2.sx+nx*.3,p2.sy+ny*.3); ctx.lineTo(p1.sx+nx*.3,p1.sy+ny*.3);
-  ctx.closePath(); ctx.fill();
-
-  // Brick cross-lines
-  const steps=Math.floor(len/scl(36));
-  ctx.strokeStyle='rgba(0,0,0,.25)'; ctx.lineWidth=scl(1);
-  for(let i=1;i<steps;i++){
-    const prog=i/steps, bx=p1.sx+dx*prog, by=p1.sy+dy*prog;
-    ctx.beginPath(); ctx.moveTo(bx+nx*.92,by+ny*.92); ctx.lineTo(bx-nx*.92,by-ny*.92); ctx.stroke();
-  }
-
-  // Pipe (runs along one wall)
-  ctx.strokeStyle='#5a4018'; ctx.lineWidth=scl(7);
-  ctx.lineCap='round';
-  ctx.beginPath(); ctx.moveTo(p1.sx+nx*.78,p1.sy+ny*.78); ctx.lineTo(p2.sx+nx*.78,p2.sy+ny*.78); ctx.stroke();
-  ctx.strokeStyle='#3a2808'; ctx.lineWidth=scl(4);
-  ctx.beginPath(); ctx.moveTo(p1.sx+nx*.78,p1.sy+ny*.78); ctx.lineTo(p2.sx+nx*.78,p2.sy+ny*.78); ctx.stroke();
-  // Pipe highlight
-  ctx.strokeStyle='rgba(120,90,40,.3)'; ctx.lineWidth=scl(1.5);
-  ctx.beginPath(); ctx.moveTo(p1.sx+nx*.72,p1.sy+ny*.72); ctx.lineTo(p2.sx+nx*.72,p2.sy+ny*.72); ctx.stroke();
-  ctx.lineCap='butt';
-
-  // Glow bleed from rooms
-  const tg=ctx.createLinearGradient(p1.sx,p1.sy,p2.sx,p2.sy);
-  tg.addColorStop(0,rgba(r1.accentColor,.05));
-  tg.addColorStop(.5,'transparent');
-  tg.addColorStop(1,rgba(r2.accentColor,.05));
-  ctx.fillStyle=tg;
-  ctx.beginPath();
-  ctx.moveTo(p1.sx+nx*.85,p1.sy+ny*.85); ctx.lineTo(p2.sx+nx*.85,p2.sy+ny*.85);
-  ctx.lineTo(p2.sx-nx*.85,p2.sy-ny*.85); ctx.lineTo(p1.sx-nx*.85,p1.sy-ny*.85);
-  ctx.closePath(); ctx.fill();
+// ââ Steam Particle System âââââââââââââââââââââââââââââââââââââââââ
+const STEAM_COUNT = 80;
+const steamPositions = new Float32Array(STEAM_COUNT * 3);
+const steamVelocities = [];
+const steamLife = new Float32Array(STEAM_COUNT);
+for (let i = 0; i < STEAM_COUNT; i++) {
+  steamPositions[i*3] = (Math.random()-0.5)*20;
+  steamPositions[i*3+1] = Math.random()*5;
+  steamPositions[i*3+2] = (Math.random()-0.5)*20;
+  steamVelocities.push({vx:(Math.random()-.5)*0.3, vy:0.4+Math.random()*0.3, vz:(Math.random()-.5)*0.3});
+  steamLife[i] = Math.random();
 }
+const steamGeo = new THREE.BufferGeometry();
+steamGeo.setAttribute('position', new THREE.BufferAttribute(steamPositions, 3));
+const steamMat = new THREE.PointsMaterial({color:0x8a7a50, size:0.22, transparent:true, opacity:0.18, sizeAttenuation:true, depthWrite:false});
+const steamPoints = new THREE.Points(steamGeo, steamMat);
+scene.add(steamPoints);
 
-// ── Draw room ─────────────────────────────────────────────────────
-function drawRoom(room,t){
-  const {sx:cx,sy:cy}=ws(room.cx,room.cy);
-  const r=scl(room.r);
+// ââ Camera Positions ââââââââââââââââââââââââââââââââââââââââââââââ
+const CAM_SHOTS = [
+  // Hub overview
+  {pos:[0, 14, 18],       target:[0, 0, 0]},
+  // Leo
+  {pos:[-18, 8, -6],      target:[-13, 0.5, -10]},
+  // Don
+  {pos:[18, 8, -6],       target:[13, 0.5, -10]},
+  // Raph
+  {pos:[-18, 8, 14],      target:[-13, 0.5, 10]},
+  // Mikey
+  {pos:[18, 8, 14],       target:[13, 0.5, 10]},
+  // Splinter
+  {pos:[0, 8, 22],        target:[0, 0.5, 15]},
+  // Cinematic wide (all rooms)
+  {pos:[0, 30, 22],       target:[0, 0, 2]},
+];
 
-  // Walls (brick ring)
-  drawBricks(cx,cy,r,room.wallColor,t);
+let camIdx = 0, camTimer = 0;
+const CAM_HOLD = 7.5;
+const camPos = new THREE.Vector3(0, 14, 18);
+const camLook = new THREE.Vector3(0, 0, 0);
+const camPosTarget = new THREE.Vector3(0, 14, 18);
+const camLookTarget = new THREE.Vector3(0, 0, 0);
+camera.position.copy(camPos);
+camera.lookAt(camLook);
 
-  // Floor inside
-  drawFloor(cx,cy,r*.94,room.floorColor,room.accentColor);
-
-  // Furniture
-  drawFurniture(room,cx,cy,r,t);
-
-  // Room edge wall shadow
-  const edgeShadow=ctx.createRadialGradient(cx,cy,r*.72,cx,cy,r);
-  edgeShadow.addColorStop(0,'transparent');
-  edgeShadow.addColorStop(1,'rgba(0,0,0,.6)');
-  ctx.fillStyle=edgeShadow;
-  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
-
-  // Accent rim glow
-  ctx.beginPath(); ctx.arc(cx,cy,r*.96,0,Math.PI*2);
-  ctx.strokeStyle=rgba(room.accentColor,.2); ctx.lineWidth=scl(3); ctx.stroke();
-
-  // Room label
-  if(r>50){
-    ctx.save();
-    ctx.font=`bold ${scl(11)}px 'Orbitron',monospace`;
-    ctx.textAlign='center'; ctx.textBaseline='top';
-    ctx.fillStyle=rgba(room.accentColor,.45);
-    ctx.fillText(room.label,cx,cy-r+scl(12));
-    ctx.restore();
-  }
+// ââ HUD clock âââââââââââââââââââââââââââââââââââââââââââââââââââââ
+function tickClock() {
+  const d = new Date();
+  document.getElementById('clock').textContent =
+    String(d.getHours()).padStart(2,'0')+':'+
+    String(d.getMinutes()).padStart(2,'0')+':'+
+    String(d.getSeconds()).padStart(2,'0');
 }
+tickClock(); setInterval(tickClock, 1000);
 
-// ── Turtles ───────────────────────────────────────────────────────
-const turtles=ROOMS.filter(r=>r.bandana).map(room=>({
-  room, x:room.cx+(Math.random()-.5)*50, y:room.cy+(Math.random()-.5)*50,
-  tx:room.cx, ty:room.cy, walkPhase:Math.random()*10,
-  buildPhase:0, state:'idle', idleTimer:Math.random()*80,
-  buildTimer:0, opacity:0, built:0,
-}));
-
-// ── Ambient steam ─────────────────────────────────────────────────
-const steamPts=[{x:0,y:-60,col:'rgba(160,140,90,'},{x:-180,y:80,col:'rgba(80,130,180,'},{x:180,y:80,col:'rgba(130,90,70,'}];
-let steamT=0;
-
-// ── Camera sequence ───────────────────────────────────────────────
-let camIdx=0, camTimer=0;
-const camSeq=[0,1,2,3,4,5];
-
-// ── Feed ─────────────────────────────────────────────────────────
-function addLog(room,msg){
-  const feed=document.getElementById('feed');
-  const el=document.createElement('div'); el.className='log';
-  el.style.borderLeftColor=room.bandana;
-  el.innerHTML=`<span class="who" style="color:${room.bandana}">${room.name}</span>${msg}`;
+function addLog(room, msg) {
+  const feed = document.getElementById('feed');
+  const el = document.createElement('div');
+  el.className = 'log';
+  const hex = '#' + room.color.toString(16).padStart(6,'0');
+  el.style.borderLeftColor = hex;
+  el.innerHTML = `<span class="who" style="color:${hex}">${room.name}</span>${msg}`;
   feed.prepend(el);
-  while(feed.children.length>3) feed.removeChild(feed.lastChild);
+  while (feed.children.length > 3) feed.removeChild(feed.lastChild);
 }
 
-// ── Main loop ─────────────────────────────────────────────────────
-let frame=0, lastT=0;
+// ââ Render Loop âââââââââââââââââââââââââââââââââââââââââââââââââââ
+const clock = new THREE.Clock();
+let frame = 0;
 
-// Pre-compute floor crack seeds
-const crackSeeds=ROOMS.map(()=>Array.from({length:5},()=>({a:Math.random()*Math.PI*2,r:Math.random(),ox1:(Math.random()-.5)*40,oy1:(Math.random()-.5)*40,ox2:(Math.random()-.5)*40,oy2:(Math.random()-.5)*40})));
-const puddleSeeds=ROOMS.map(()=>Array.from({length:3},()=>({ox:(Math.random()-.5),oy:(Math.random()-.5),r:8+Math.random()*18,rot:Math.random()*Math.PI})));
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.08);
+  const t = clock.getElapsedTime();
+  frame++;
 
-function loop(ts){
-  requestAnimationFrame(loop);
-  const dt=Math.min((ts-lastT)/16.67,3); lastT=ts; frame++;
-
-  // Camera
-  camTimer+=dt;
-  if(camTimer>300){ camIdx=(camIdx+1)%camSeq.length; camTimer=0; }
-  const tr=ROOMS[camSeq[camIdx]];
-  const tz=camIdx===0?.58:.85;
-  cam.tx=tr.cx; cam.ty=tr.cy; cam.tz=tz;
-  cam.x+=(cam.tx-cam.x)*.016*dt;
-  cam.y+=(cam.ty-cam.y)*.016*dt;
-  cam.zoom+=(cam.tz-cam.zoom)*.016*dt;
-  document.getElementById('cam-label').textContent=tr.label;
-
-  // Steam & drips
-  steamT+=dt;
-  if(steamT>15){ steamPts.forEach(s=>steam(s.x,s.y,s.col,3)); steamT=0; }
-  if(frame%50===0) drip(ROOMS[Math.floor(Math.random()*ROOMS.length)].cx+(Math.random()-.5)*120,ROOMS[Math.floor(Math.random()*ROOMS.length)].cy-70);
-
-  // Particles
-  for(let i=parts.length-1;i>=0;i--){
-    const p=parts[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=p.decay*dt;
-    if(p.type==='steam') p.r+=0.06*dt;
-    if(p.life<=0) parts.splice(i,1);
+  // Camera sequence
+  camTimer += dt;
+  if (camTimer >= CAM_HOLD) {
+    camTimer = 0;
+    camIdx = (camIdx + 1) % CAM_SHOTS.length;
+    const sh = CAM_SHOTS[camIdx];
+    camPosTarget.set(...sh.pos);
+    camLookTarget.set(...sh.target);
+    // Label based on room
+    const room = camIdx < ROOMS.length ? ROOMS[camIdx] : ROOMS[0];
+    document.getElementById('cam-label').textContent = room.label;
   }
+  camPos.lerp(camPosTarget, dt * 1.1);
+  camLook.lerp(camLookTarget, dt * 1.3);
+  camera.position.copy(camPos);
+  camera.lookAt(camLook);
 
-  // Turtles
-  turtles.forEach(t=>{
-    if(t.opacity<1) t.opacity=Math.min(1,t.opacity+.01*dt);
-    if(t.state==='idle'){
-      if((t.idleTimer-=dt)<=0){
-        const a=Math.random()*Math.PI*2, r=Math.random()*t.room.r*.62;
-        t.tx=t.room.cx+Math.cos(a)*r; t.ty=t.room.cy+Math.sin(a)*r;
-        t.state='walk';
-      }
-    } else if(t.state==='walk'){
-      const dx=t.tx-t.x, dy=t.ty-t.y, d=Math.sqrt(dx*dx+dy*dy);
-      if(d<4){ t.x=t.tx; t.y=t.ty; t.state=Math.random()<.5?'build':'idle'; t.idleTimer=70+Math.random()*90; t.buildTimer=80+Math.random()*100; }
-      else { t.x+=dx/d*1.6*dt; t.y+=dy/d*1.6*dt; t.walkPhase+=dt*.16; }
-    } else {
-      t.buildPhase+=dt; t.walkPhase+=dt*.05;
-      if((t.buildTimer-=dt)<=0){
-        t.state='idle'; t.idleTimer=40; t.buildPhase=0; t.built++;
-        spark(t.x,t.y,t.room.bandana);
-        addLog(t.room,t.room.tasks[Math.floor(Math.random()*t.room.tasks.length)]);
-      }
+  // Room light & ring pulse
+  ROOMS.forEach(room => {
+    if (room.ptLight) {
+      room.ptLight.intensity = 1.2 + Math.sin(t*1.4 + room.x*0.2)*0.35;
+    }
+    if (room.ringMat) {
+      room.ringMat.emissiveIntensity = 0.6 + Math.sin(t*2.1 + room.z*0.15)*0.35;
+    }
+    if (room.bulbMat) {
+      room.bulbMat.emissiveIntensity = 1.8 + Math.sin(t*1.4 + room.x*0.2)*0.5;
+    }
+    if (room.waterMesh) {
+      room.waterMesh.material.opacity = 0.75 + Math.sin(t*1.8)*0.08;
     }
   });
 
-  // ── DRAW ─────────────────────────────────────────────────────────
-  ctx.clearRect(0,0,W,H);
-
-  // Background — deep dark stone
-  const bg=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.max(W,H)*.7);
-  bg.addColorStop(0,'#0e0a06'); bg.addColorStop(1,'#030201');
-  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
-
-  // Tunnels behind rooms
-  TUNNELS.forEach(t=>drawTunnel(t));
-
-  // Rooms
-  ROOMS.forEach(r=>drawRoom(r,frame));
-
-  // Particles
-  parts.forEach(p=>{
-    const {sx,sy}=ws(p.x,p.y);
-    ctx.globalAlpha=Math.max(0,p.life);
-    if(p.type==='steam'){
-      const sg=ctx.createRadialGradient(sx,sy,0,sx,sy,scl(p.r));
-      sg.addColorStop(0,p.col+'.12)'); sg.addColorStop(1,p.col+'0)');
-      ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(sx,sy,scl(p.r),0,Math.PI*2); ctx.fill();
-    } else if(p.type==='drip'){
-      ctx.fillStyle='#1a3a5a';
-      ctx.beginPath(); ctx.ellipse(sx,sy,scl(1.2),scl(2.2),0,0,Math.PI*2); ctx.fill();
+  // Steam particles
+  const sPos = steamGeo.attributes.position.array;
+  for (let i = 0; i < STEAM_COUNT; i++) {
+    steamLife[i] += dt * (0.25 + Math.random()*0.1);
+    if (steamLife[i] > 1) {
+      // Reset to a sewer vent position
+      const room = ROOMS[Math.floor(Math.random()*ROOMS.length)];
+      sPos[i*3]   = room.x + (Math.random()-.5)*room.radius*1.2;
+      sPos[i*3+1] = 0.3;
+      sPos[i*3+2] = room.z + (Math.random()-.5)*room.radius*1.2;
+      steamVelocities[i].vx = (Math.random()-.5)*0.4;
+      steamVelocities[i].vy = 0.35 + Math.random()*0.35;
+      steamVelocities[i].vz = (Math.random()-.5)*0.4;
+      steamLife[i] = 0;
     } else {
-      ctx.fillStyle=p.col; ctx.shadowColor=p.col; ctx.shadowBlur=scl(5);
-      ctx.beginPath(); ctx.arc(sx,sy,scl(p.r),0,Math.PI*2); ctx.fill();
-      ctx.shadowBlur=0;
+      sPos[i*3]   += steamVelocities[i].vx * dt;
+      sPos[i*3+1] += steamVelocities[i].vy * dt;
+      sPos[i*3+2] += steamVelocities[i].vz * dt;
     }
-    ctx.globalAlpha=1;
+  }
+  steamGeo.attributes.position.needsUpdate = true;
+  steamMat.opacity = 0.16 + Math.sin(t*0.8)*0.04;
+
+  // Turtle AI & animation
+  TURTLES.forEach(ts => {
+    const { group, room } = ts;
+
+    // Animate limbs
+    group.children.forEach(child => {
+      if (child.userData.idx !== undefined) {
+        const swing = ts.state === 'walk'
+          ? Math.sin(ts.walkPhase*4 + child.userData.idx * Math.PI*0.5) * 0.12
+          : 0;
+        child.position.y = child.userData.baseY + swing;
+      }
+    });
+
+    if (ts.state === 'idle') {
+      group.userData.workLight.intensity = 0;
+      ts.idleTimer -= dt;
+      if (ts.idleTimer <= 0) {
+        const ang = Math.random()*Math.PI*2;
+        const dist = Math.random()*(room.radius - 0.9);
+        ts.tx = room.x + Math.cos(ang)*dist;
+        ts.tz = room.z + Math.sin(ang)*dist;
+        ts.state = 'walk';
+      }
+    } else if (ts.state === 'walk') {
+      const dx = ts.tx - ts.x, dz = ts.tz - ts.z;
+      const dist = Math.sqrt(dx*dx + dz*dz);
+      if (dist < 0.25) {
+        ts.x = ts.tx; ts.tz = ts.tz;
+        ts.state = Math.random() < 0.5 ? 'build' : 'idle';
+        ts.idleTimer = 45 + Math.random()*75;
+        ts.buildTimer = 70 + Math.random()*100;
+      } else {
+        const spd = 2.8;
+        ts.x += (dx/dist)*spd*dt;
+        ts.z += (dz/dist)*spd*dt;
+        ts.walkPhase += dt*3.2;
+        group.rotation.y = Math.atan2(dx, dz);
+      }
+      group.userData.workLight.intensity *= (1 - dt*8);
+    } else { // build
+      ts.buildTimer -= dt;
+      ts.walkPhase += dt*0.3;
+      group.userData.workLight.intensity = 1.4 + Math.sin(t*9)*0.6;
+      if (ts.buildTimer <= 0) {
+        ts.state = 'idle';
+        ts.idleTimer = 30 + Math.random()*30;
+        group.userData.workLight.intensity = 0;
+        addLog(room, room.tasks[Math.floor(Math.random()*room.tasks.length)]);
+      }
+    }
+
+    // Bob
+    const bob = ts.state === 'walk' ? Math.abs(Math.sin(ts.walkPhase*2))*0.07 : 0;
+    group.position.set(ts.x, bob, ts.z);
   });
 
-  // Turtles (depth sort)
-  turtles.slice().sort((a,b)=>a.y-b.y).forEach(t=>drawTurtle(t.x,t.y,t.room,t.walkPhase,t.buildPhase,t.opacity,t.state==='build'));
-
-  // Cinematic vignette
-  const vig=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.18,W/2,H/2,Math.max(W,H)*.85);
-  vig.addColorStop(0,'transparent'); vig.addColorStop(1,'rgba(0,0,0,.82)');
-  ctx.fillStyle=vig; ctx.fillRect(0,0,W,H);
-
-  // Subtle film grain
-  if(frame%3===0){
-    ctx.globalAlpha=.018;
-    for(let i=0;i<350;i++){
-      ctx.fillStyle=Math.random()>.5?'#fff':'#000';
-      ctx.fillRect(Math.random()*W,Math.random()*H,1.5,1.5);
-    }
-    ctx.globalAlpha=1;
-  }
+  renderer.render(scene, camera);
 }
 
-addLog(ROOMS.find(r=>r.key==='splinter'),'Entering the lair...');
-requestAnimationFrame(loop);
+addLog(ROOMS.find(r => r.key==='spl'), 'Entering the lair...');
+document.getElementById('cam-label').textContent = ROOMS[0].label;
+animate();
 </script>
