@@ -27,3 +27,11 @@ To push changes: edit `index.html`, commit, push to `main`. Paste the updated fi
 - `index.html` — the entire world (Three.js scene, bot logic, HUD overlay, sector data)
 
 Each sector's tasks are defined in the `SECTORS` array near the top of the script block — easy to edit.
+
+## Video editing with Claude Code
+
+`.claude/skills/video-edit/` is a skill for the Content Hub. Ask Claude Code to "edit my video" (or type `/video-edit`) and it runs six steps: hook and script, silence cutting, design plan, a parallel build with subagents (captions, graphics, B-roll, thumbnail), QA by the `video-checker` agent, and saving your feedback to `NOTES.md` so later edits follow it.
+
+- Needs `ffmpeg`. Captions also need `pip install faster-whisper`.
+- Fill in `.claude/skills/video-edit/style.md` with your brand once.
+- Footage goes in `videos/<slug>/raw/`. The `videos/` folder is git-ignored.
