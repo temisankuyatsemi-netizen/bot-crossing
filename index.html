@@ -160,8 +160,8 @@ ROOMS.forEach(room=>{
   const fl=new THREE.Mesh(new THREE.CircleGeometry(room.r,56),M(h2n(room.floor),.96));
   fl.rotation.x=-Math.PI/2; fl.position.set(room.x,1,room.z); fl.receiveShadow=true; scene.add(fl);
   // Outer wall cylinder (inside face)
-  scene.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(room.r,room.r,room.h,56,1,true),wallMat),
-    {position:new THREE.Vector3(room.x,room.h/2,room.z)}));
+  const wm=new THREE.Mesh(new THREE.CylinderGeometry(room.r,room.r,room.h,56,1,true),wallMat);
+  wm.position.set(room.x,room.h/2,room.z); scene.add(wm);
   // Ceiling
   const cl=new THREE.Mesh(new THREE.CircleGeometry(room.r,56),M(0x090704,.99));
   cl.rotation.x=Math.PI/2; cl.position.set(room.x,room.h,room.z); scene.add(cl);
@@ -355,188 +355,344 @@ function furniture(room){
 }
 ROOMS.filter(r=>r.key!=='hub').forEach(furniture);
 
-// ── turtle characters (scale: 1cm = 1unit, turtles ~170cm tall) ───────────
+// ── turtle characters — matched to TMNT 2012 reference ────────────────────
 function buildTurtle(room){
   const G=new THREE.Group();
-  const skin=M(0x3a8820,.8), skinDk=M(0x2a6010,.85);
-  const shellM=new THREE.MeshStandardMaterial({color:0x6a5218,roughness:.65,metalness:.12});
+  // Colors matching reference: vivid green, cream plastron, brown shell, leather pads
+  const skinC=0x4ab228, skinDkC=0x2e7010, plastC=0xd4ca7a, shellC=0x7a5a14, padC=0xb87840;
+  const skin=M(skinC,.75), skinDk=M(skinDkC,.8);
+  const plastM=M(plastC,.65);
+  const shellM=new THREE.MeshStandardMaterial({color:shellC,roughness:.6,metalness:.1});
+  const scuteM=M(0x5a4010,.65);
+  const padM=M(padC,.8);
   const bC=h2n(room.bandana||'#888888');
-  const bndM=new THREE.MeshStandardMaterial({color:bC,emissive:bC,emissiveIntensity:.28,roughness:.6});
-  const silvM=new THREE.MeshStandardMaterial({color:0xcccccc,roughness:.25,metalness:.95});
-  const goldM=new THREE.MeshStandardMaterial({color:0xd4a020,roughness:.35,metalness:.85});
-  const woodM=M(0x4a2c10,.75);
+  const bndM=new THREE.MeshStandardMaterial({color:bC,emissive:bC,emissiveIntensity:.35,roughness:.55});
+  const silvM=new THREE.MeshStandardMaterial({color:0xd8d8d8,roughness:.2,metalness:.97});
+  const goldM=new THREE.MeshStandardMaterial({color:0xd4a020,roughness:.3,metalness:.9});
+  const woodM=M(0x4a2c10,.72);
+  const wrpM=M(0x3a1c08,.85); // wrap/strap material
 
-  // Legs
-  const legL=new THREE.Mesh(new THREE.CylinderGeometry(21,18,120,10),skin);
-  legL.position.set(-32,60,0); G.add(legL);
-  const legR=new THREE.Mesh(new THREE.CylinderGeometry(21,18,120,10),skin);
-  legR.position.set(32,60,0); G.add(legR);
-  // Feet
-  [[-32,18],[32,18]].forEach(([x])=>{
-    const f=new THREE.Mesh(new THREE.BoxGeometry(40,25,55),skinDk);
-    f.position.set(x,5,18); G.add(f);
+  // ── THIGHS + LEGS ──
+  const thighL=new THREE.Mesh(new THREE.CylinderGeometry(30,24,80,12),skin);
+  thighL.position.set(-38,104,0); G.add(thighL);
+  const thighR=thighL.clone(); thighR.position.x=38; G.add(thighR);
+  const shinL=new THREE.Mesh(new THREE.CylinderGeometry(22,18,80,12),skin);
+  shinL.position.set(-38,44,4); G.add(shinL);
+  const shinR=shinL.clone(); shinR.position.x=38; G.add(shinR);
+  // Knee pads
+  [-38,38].forEach(x=>{
+    const kp=new THREE.Mesh(new THREE.SphereGeometry(26,10,8,0,Math.PI*2,0,Math.PI*.55),padM);
+    kp.rotation.x=-Math.PI/3; kp.position.set(x,82,16); G.add(kp);
+    // Knee wrap straps
+    const ws=new THREE.Mesh(new THREE.CylinderGeometry(23,23,8,12,1,true),wrpM);
+    ws.position.set(x,76,0); G.add(ws);
+  });
+  // Feet — 3-toed turtle feet
+  [-38,38].forEach(x=>{
+    const foot=new THREE.Mesh(new THREE.SphereGeometry(22,12,8),skinDk);
+    foot.scale.set(1.1,.45,1.6); foot.position.set(x,10,15); G.add(foot);
     for(let t=0;t<3;t++){
-      const tn=new THREE.Mesh(new THREE.BoxGeometry(9,6,15),M(0xccbbaa,.4));
-      tn.position.set(x+(t-1)*13,6,42); G.add(tn);
+      const toe=new THREE.Mesh(new THREE.SphereGeometry(8,8,6),skinDk);
+      toe.position.set(x+(t-1)*14,8,32+(t===1?6:0)); G.add(toe);
+      const nail=new THREE.Mesh(new THREE.CylinderGeometry(3,2,12,6),M(0xd4c8a0,.4));
+      nail.rotation.x=.3; nail.position.set(x+(t-1)*14,7,42); G.add(nail);
     }
   });
-  // Torso
-  const torso=new THREE.Mesh(new THREE.CylinderGeometry(40,45,100,14),skin);
-  torso.position.y=130; G.add(torso);
-  // Shell
-  const sGeo=new THREE.SphereGeometry(65,20,14,0,Math.PI*2,0,Math.PI*.58);
-  const sMesh=new THREE.Mesh(sGeo,shellM);
-  sMesh.rotation.x=Math.PI/4; sMesh.position.set(0,155,-25); G.add(sMesh);
-  const scuteM=M(0x4a3810,.7);
-  for(let s=-1;s<=1;s++){
-    const sv=new THREE.Mesh(new THREE.BoxGeometry(3,65,3),scuteM);
-    sv.rotation.x=Math.PI/4; sv.position.set(s*20,155,-20); G.add(sv);
-    const sh=new THREE.Mesh(new THREE.BoxGeometry(65,3,3),scuteM);
-    sh.rotation.x=Math.PI/4; sh.position.set(0,155+s*22,-20); G.add(sh);
+
+  // ── TORSO — wide, muscular ──
+  const torso=new THREE.Mesh(new THREE.CylinderGeometry(52,46,110,16),skin);
+  torso.position.y=140; G.add(torso);
+  // Shoulder width flare
+  const shoulderL=new THREE.Mesh(new THREE.SphereGeometry(34,12,10),skin);
+  shoulderL.scale.set(1,.7,1); shoulderL.position.set(-60,180,0); G.add(shoulderL);
+  const shoulderR=shoulderL.clone(); shoulderR.position.x=60; G.add(shoulderR);
+
+  // ── PLASTRON (belly plate) — lighter cream front ──
+  const plast=new THREE.Mesh(new THREE.SphereGeometry(48,16,12,0,Math.PI*2,0,Math.PI*.52),plastM);
+  plast.rotation.x=-Math.PI/2.2; plast.position.set(0,140,35); G.add(plast);
+  // Plastron scute lines
+  const psM=M(0xb8aa5a,.7);
+  for(let i=0;i<3;i++){
+    const pl=new THREE.Mesh(new THREE.BoxGeometry(2,40,2),psM);
+    pl.rotation.x=-Math.PI/2.2; pl.position.set((i-1)*22,140,36); G.add(pl);
   }
-  const plast=new THREE.Mesh(new THREE.SphereGeometry(42,16,10,0,Math.PI*2,0,Math.PI*.55),M(0xd4a840,.6));
-  plast.rotation.x=-Math.PI/2.5; plast.position.set(0,130,30); G.add(plast);
-  // Neck
-  const neck=new THREE.Mesh(new THREE.CylinderGeometry(25,30,35,12),skin);
-  neck.position.y=190; G.add(neck);
-  // Head
-  const head=new THREE.Mesh(new THREE.SphereGeometry(45,18,14),skin);
-  head.scale.set(1,.88,.98); head.position.y=230; G.add(head);
-  const chin=new THREE.Mesh(new THREE.SphereGeometry(20,10,8),skinDk);
-  chin.scale.set(1,.5,1); chin.position.set(0,205,35); G.add(chin);
-  // Bandana
-  const mask=new THREE.Mesh(new THREE.BoxGeometry(98,20,45),bndM);
-  mask.position.set(0,232,25); G.add(mask);
-  const knot=new THREE.Mesh(new THREE.BoxGeometry(20,35,20),bndM);
-  knot.position.set(0,232,-50); G.add(knot);
-  [[-20,.3],[20,-.3]].forEach(([ox,rz])=>{
-    const tail=new THREE.Mesh(new THREE.BoxGeometry(15,55,15),bndM);
-    tail.rotation.z=rz; tail.position.set(ox,198,-65); G.add(tail);
+  const ph=new THREE.Mesh(new THREE.BoxGeometry(80,2,2),psM);
+  ph.rotation.x=-Math.PI/2.2; ph.position.set(0,155,36); G.add(ph);
+  const ph2=ph.clone(); ph2.position.y=130; G.add(ph2);
+
+  // ── SHELL — dome on back ──
+  const shellGeo=new THREE.SphereGeometry(58,20,14,0,Math.PI*2,0,Math.PI*.6);
+  const shellMesh=new THREE.Mesh(shellGeo,shellM);
+  shellMesh.rotation.x=Math.PI*.42; shellMesh.position.set(0,152,-28); G.add(shellMesh);
+  // Shell scute pattern
+  const scuteLines=[
+    [0,152,-20,3,70,3,Math.PI*.42],[-22,152,-18,3,55,3,Math.PI*.42],[22,152,-18,3,55,3,Math.PI*.42],
+  ];
+  scuteLines.forEach(([x,y,z,w,h,d,rx])=>{
+    const sc=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),scuteM);
+    sc.rotation.x=rx; sc.position.set(x,y,z); G.add(sc);
   });
-  // Eyes
-  const eyeW=M(0xfafafa,.2);
-  const eyeP=new THREE.MeshStandardMaterial({color:0x090909,roughness:.1,metalness:.5,emissive:bC,emissiveIntensity:.15});
+  for(let r=0;r<3;r++){
+    const sr=new THREE.Mesh(new THREE.BoxGeometry(70,3,3),scuteM);
+    sr.rotation.x=Math.PI*.42; sr.position.set(0,138+r*22,-22); G.add(sr);
+  }
+
+  // ── NECK ──
+  const neck=new THREE.Mesh(new THREE.CylinderGeometry(28,32,38,12),skin);
+  neck.position.y=200; G.add(neck);
+
+  // ── HEAD ── rounded top, protruding lower jaw like reference
+  const head=new THREE.Mesh(new THREE.SphereGeometry(46,18,14),skin);
+  head.scale.set(1,.95,1.05); head.position.y=238; G.add(head);
+  // Lower jaw protrusion
+  const jaw=new THREE.Mesh(new THREE.SphereGeometry(32,14,10),skin);
+  jaw.scale.set(1,.55,1.1); jaw.position.set(0,220,28); G.add(jaw);
+  // Forehead ridge
+  const brow=new THREE.Mesh(new THREE.BoxGeometry(80,8,20),skinDk);
+  brow.rotation.x=-.2; brow.position.set(0,252,18); G.add(brow);
+
+  // ── BANDANA — across eyes, tails behind ──
+  // Main strip across eyes
+  const band=new THREE.Mesh(new THREE.BoxGeometry(105,22,8),bndM);
+  band.position.set(0,242,30); G.add(band);
+  // Side wraps around head
   [-1,1].forEach(s=>{
-    const ew=new THREE.Mesh(new THREE.SphereGeometry(14,10,10),eyeW);
-    ew.position.set(s*20,235,38); G.add(ew);
-    const ep=new THREE.Mesh(new THREE.SphereGeometry(8.5,10,10),eyeP);
-    ep.position.set(s*20,235,48); G.add(ep);
-    const sh=new THREE.Mesh(new THREE.SphereGeometry(4,6,6),M(0xffffff,.1));
-    sh.position.set(s*20+4,240,52); G.add(sh);
+    const sw=new THREE.Mesh(new THREE.BoxGeometry(8,22,72),bndM);
+    sw.position.set(s*48,242,0); G.add(sw);
   });
-  [-8,8].forEach(nx=>{
-    const n=new THREE.Mesh(new THREE.SphereGeometry(4,6,6),M(0x1a4808,.9));
-    n.position.set(nx,225,48); G.add(n);
+  // Tails hanging behind/beside
+  [[-28,-.25],[28,.25]].forEach(([ox,rz])=>{
+    const t1=new THREE.Mesh(new THREE.BoxGeometry(16,70,14),bndM);
+    t1.rotation.z=rz; t1.position.set(ox,210,-52); G.add(t1);
+    const t2=new THREE.Mesh(new THREE.BoxGeometry(12,50,10),bndM);
+    t2.rotation.z=rz*.5; t2.position.set(ox+(ox>0?8:-8),165,-60); G.add(t2);
   });
-  // Arms
-  const armL=new THREE.Mesh(new THREE.CylinderGeometry(18,14,100,10),skin);
-  armL.position.set(-60,135,0); armL.rotation.z=.55; G.add(armL);
-  const armR=armL.clone(); armR.position.x=60; armR.rotation.z=-.55; G.add(armR);
-  const hnd=new THREE.SphereGeometry(21,10,10);
-  const hL=new THREE.Mesh(hnd,skinDk); hL.position.set(-110,95,0); G.add(hL);
-  const hR=new THREE.Mesh(hnd,skinDk); hR.position.set(110,95,0); G.add(hR);
-  for(let k=0;k<3;k++){
-    [[-110],[110]].forEach(([hx])=>{
-      const kn=new THREE.Mesh(new THREE.SphereGeometry(6,6,6),skinDk);
-      kn.position.set(hx+(hx>0?-1:1)*k*6,95+(k*3),15+(k*4)); G.add(kn);
+
+  // ── EYES (above bandana line) ──
+  const eyeW=M(0xffffff,.15);
+  const eyeP=new THREE.MeshStandardMaterial({color:0x080808,roughness:.05,metalness:.6,emissive:0x111111,emissiveIntensity:.3});
+  [-1,1].forEach(s=>{
+    const ew=new THREE.Mesh(new THREE.SphereGeometry(15,12,10),eyeW);
+    ew.position.set(s*22,248,36); G.add(ew);
+    const ep=new THREE.Mesh(new THREE.SphereGeometry(9,12,10),eyeP);
+    ep.position.set(s*22,248,46); G.add(ep);
+    const sh=new THREE.Mesh(new THREE.SphereGeometry(4,6,6),M(0xffffff,.05));
+    sh.position.set(s*22+5,252,50); G.add(sh);
+  });
+  // Nostrils
+  [-10,10].forEach(nx=>{
+    const n=new THREE.Mesh(new THREE.SphereGeometry(5,6,6),M(0x1e5508,.9));
+    n.position.set(nx,230,44); G.add(n);
+  });
+
+  // ── ARMS — thick, muscular ──
+  const uArmL=new THREE.Mesh(new THREE.CylinderGeometry(25,20,90,12),skin);
+  uArmL.position.set(-76,168,0); uArmL.rotation.z=.62; G.add(uArmL);
+  const uArmR=new THREE.Mesh(new THREE.CylinderGeometry(25,20,90,12),skin);
+  uArmR.position.set(76,168,0); uArmR.rotation.z=-.62; G.add(uArmR);
+  const lArmL=new THREE.Mesh(new THREE.CylinderGeometry(18,15,80,12),skin);
+  lArmL.position.set(-115,120,0); lArmL.rotation.z=.3; G.add(lArmL);
+  const lArmR=new THREE.Mesh(new THREE.CylinderGeometry(18,15,80,12),skin);
+  lArmR.position.set(115,120,0); lArmR.rotation.z=-.3; G.add(lArmR);
+  // Elbow pads
+  [-1,1].forEach(s=>{
+    const ep=new THREE.Mesh(new THREE.SphereGeometry(22,10,8,0,Math.PI*2,0,Math.PI*.5),padM);
+    ep.rotation.z=s*Math.PI*.5; ep.position.set(s*97,142,0); G.add(ep);
+    const ws=new THREE.Mesh(new THREE.CylinderGeometry(19,19,10,12,1,true),wrpM);
+    ws.position.set(s*97,135,0); G.add(ws);
+  });
+  // Wrist wraps
+  [-1,1].forEach(s=>{
+    const wr=new THREE.Mesh(new THREE.CylinderGeometry(16,16,18,12,1,true),wrpM);
+    wr.position.set(s*135,100,0); G.add(wr);
+  });
+  // Hands (3-fingered)
+  const hL=new THREE.Mesh(new THREE.SphereGeometry(20,10,10),skinDk);
+  hL.scale.set(1,.8,1.1); hL.position.set(-148,90,8); G.add(hL);
+  const hR=hL.clone(); hR.position.x=148; hR.scale.x=1; G.add(hR);
+  for(let f=0;f<3;f++){
+    [-148,148].forEach(hx=>{
+      const fi=new THREE.Mesh(new THREE.SphereGeometry(9,8,6),skinDk);
+      fi.position.set(hx+(hx>0?-1:1)*(f-1)*10,75,20+f*3); G.add(fi);
     });
   }
 
-  // Weapons
+  // ── BELT / WRAP ──
+  const belt=new THREE.Mesh(new THREE.CylinderGeometry(54,50,16,16,1,true),wrpM);
+  belt.position.y=110; G.add(belt);
+  const buckle=new THREE.Mesh(new THREE.BoxGeometry(20,14,8),M(0xc8a030,.4,.7));
+  buckle.position.set(0,110,54); G.add(buckle);
+
+  // ── WEAPONS ──
   if(room.key==='leo'){
-    [-120,120].forEach((sx,i)=>{
-      const blade=new THREE.Mesh(new THREE.BoxGeometry(4.5,200,9),silvM);
-      blade.position.set(sx,180,10); blade.rotation.z=i===0?.08:-.08; G.add(blade);
-      const guard=new THREE.Mesh(new THREE.BoxGeometry(35,9,16),goldM);
-      guard.position.set(sx,85,10); G.add(guard);
-      const handle=new THREE.Mesh(new THREE.CylinderGeometry(9,9,50,8),woodM);
-      handle.position.set(sx,55,0); G.add(handle);
+    // Dual katana on back (crossed) — Leo's signature
+    [-1,1].forEach((s,i)=>{
+      const blade=new THREE.Mesh(new THREE.BoxGeometry(5,195,8),silvM);
+      blade.position.set(s*18,195,-20); blade.rotation.set(.15,0,s*.08); G.add(blade);
+      const edge=new THREE.Mesh(new THREE.BoxGeometry(2,195,1),M(0xffffff,.1,.99));
+      edge.position.set(s*18,195,-16); edge.rotation.set(.15,0,s*.08); G.add(edge);
+      const guard=new THREE.Mesh(new THREE.BoxGeometry(38,10,16),goldM);
+      guard.position.set(s*18,94,-18); G.add(guard);
+      const wrap=new THREE.Mesh(new THREE.CylinderGeometry(8,8,55,8),wrpM);
+      wrap.position.set(s*18,62,-16); wrap.rotation.set(.15,0,s*.08); G.add(wrap);
     });
   }else if(room.key==='don'){
-    const bo=new THREE.Mesh(new THREE.CylinderGeometry(7.5,7.5,420,10),woodM);
-    bo.position.set(100,200,0); bo.rotation.z=.12; G.add(bo);
-    [[-15,375],[215,25]].forEach(([px,py])=>{
-      const tip=new THREE.Mesh(new THREE.CylinderGeometry(9,7,25,8),goldM);
-      tip.position.set(px,py,0); G.add(tip);
+    // Bo staff — long, held at side
+    const bo=new THREE.Mesh(new THREE.CylinderGeometry(8,8,430,10),woodM);
+    bo.position.set(105,200,0); bo.rotation.z=.1; G.add(bo);
+    [[-8,407],[218,12]].forEach(([px,py])=>{
+      const tp=new THREE.Mesh(new THREE.CylinderGeometry(10,7,28,8),M(0x888888,.4,.8));
+      tp.position.set(px,py,0); G.add(tp);
     });
+    // Grip tape
+    for(let g=0;g<6;g++){
+      const gt=new THREE.Mesh(new THREE.CylinderGeometry(9.5,9.5,8,8,1,true),wrpM);
+      gt.position.set(88+g*8,210,0); gt.rotation.z=.1; G.add(gt);
+    }
   }else if(room.key==='raph'){
-    [-110,110].forEach((sx,si)=>{
-      const main=new THREE.Mesh(new THREE.CylinderGeometry(5.5,3.5,170,8),silvM);
-      main.position.set(sx,170,5); G.add(main);
-      const handle=new THREE.Mesh(new THREE.CylinderGeometry(9,9,50,8),woodM);
-      handle.position.set(sx,75,0); G.add(handle);
-      const gd=si===0?1:-1;
-      [gd*.55,-gd*.55].forEach(ang=>{
-        const g=new THREE.Mesh(new THREE.CylinderGeometry(4,3,70,6),silvM);
-        g.rotation.z=ang*Math.PI; g.position.set(sx,90,0); G.add(g);
-      });
+    // Dual sai — held up aggressively
+    [-1,1].forEach(s=>{
+      const sx=s*145, hY=100;
+      // Main prong
+      const mp=new THREE.Mesh(new THREE.CylinderGeometry(5,3,165,8),silvM);
+      mp.position.set(sx,hY+80,18); mp.rotation.z=s*-.05; G.add(mp);
+      // Handle
+      const hn=new THREE.Mesh(new THREE.CylinderGeometry(8,8,55,8),wrpM);
+      hn.position.set(sx,hY,15); G.add(hn);
+      // Side guards (tsuba)
+      const g1=new THREE.Mesh(new THREE.CylinderGeometry(5,3,72,6),silvM);
+      g1.rotation.z=s*.9; g1.position.set(sx+s*28,hY+32,15); G.add(g1);
+      const g2=new THREE.Mesh(new THREE.CylinderGeometry(5,3,72,6),silvM);
+      g2.rotation.z=-s*.9; g2.position.set(sx-s*28,hY+32,15); G.add(g2);
+      // Pommel
+      const pm=new THREE.Mesh(new THREE.SphereGeometry(10,8,8),silvM);
+      pm.position.set(sx,hY-32,15); G.add(pm);
     });
   }else if(room.key==='mikey'){
-    const h1=new THREE.Mesh(new THREE.CylinderGeometry(10,7.5,80,8),woodM);
-    h1.position.set(110,150,0); G.add(h1);
-    const h2=new THREE.Mesh(new THREE.CylinderGeometry(10,7.5,80,8),woodM);
-    h2.position.set(110,50,15); h2.rotation.z=.45; G.add(h2);
-    for(let c=0;c<5;c++){
-      const lk=new THREE.Mesh(new THREE.TorusGeometry(6,2.5,5,8),silvM);
-      lk.rotation.x=c*.3; lk.position.set(110,110-c*14,c*2.5); G.add(lk);
+    // Nunchaku — one swinging
+    const h1=new THREE.Mesh(new THREE.CylinderGeometry(11,8.5,85,8),woodM);
+    h1.position.set(145,155,10); h1.rotation.z=.15; G.add(h1);
+    // Grip wraps on handle
+    for(let w=0;w<4;w++){
+      const gw=new THREE.Mesh(new THREE.CylinderGeometry(12,12,10,8,1,true),wrpM);
+      gw.position.set(145+w*1.2,130+w*8,10); gw.rotation.z=.15; G.add(gw);
     }
+    // Chain links
+    for(let c=0;c<6;c++){
+      const lk=new THREE.Mesh(new THREE.TorusGeometry(7,2.5,5,8),silvM);
+      lk.rotation.x=c*.4; lk.position.set(145+c*4,115-c*14,c*3+10); G.add(lk);
+    }
+    const h2=new THREE.Mesh(new THREE.CylinderGeometry(11,8.5,85,8),woodM);
+    h2.position.set(162,35,28); h2.rotation.set(0,0,.7); G.add(h2);
   }
 
-  G.userData={walkPhase:Math.random()*Math.PI*2,bobPhase:Math.random()*Math.PI*2,legL,legR};
+  G.userData={walkPhase:Math.random()*Math.PI*2,bobPhase:Math.random()*Math.PI*2,legL:shinL,legR:shinR};
   return G;
 }
 
 function buildSplinter(room){
   const G=new THREE.Group();
-  const fur=M(0x9a7a5a,.82), furDk=M(0x5a3820,.88);
-  const robeC=h2n(room.bandana||'#55cc33');
-  const robeM=new THREE.MeshStandardMaterial({color:robeC,emissive:robeC,emissiveIntensity:.1,roughness:.82});
-  const silvM=new THREE.MeshStandardMaterial({color:0xaaaaaa,roughness:.4,metalness:.75});
+  // Reference: tall rat elder, dark maroon/brown robes, wise pose
+  const fur=M(0x8a6a4a,.8), furDk=M(0x4a2e18,.88), furLt=M(0xb89a7a,.7);
+  const robeC=0x5a1a08; // dark maroon like reference
+  const robeM=new THREE.MeshStandardMaterial({color:robeC,roughness:.88});
+  const innerRobeM=M(0x3a1005,.9);
+  const silvM=new THREE.MeshStandardMaterial({color:0xaaaaaa,roughness:.35,metalness:.8});
   const woodM=M(0x5a3010,.7);
+  const sashM=M(0x8a1010,.75);
 
-  const robe=new THREE.Mesh(new THREE.CylinderGeometry(35,75,160,14),robeM);
-  robe.position.y=80; G.add(robe);
-  const sash=new THREE.Mesh(new THREE.CylinderGeometry(45,45,15,14),M(0xb8a040,.6));
-  sash.position.y=100; G.add(sash);
-  const torso=new THREE.Mesh(new THREE.CylinderGeometry(30,35,120,12),fur);
-  torso.position.y=110; G.add(torso);
-  const head=new THREE.Mesh(new THREE.SphereGeometry(50,16,12),fur);
-  head.scale.set(.82,.96,1.18); head.position.y=220; G.add(head);
-  const snout=new THREE.Mesh(new THREE.SphereGeometry(22,10,8),furDk);
-  snout.scale.set(.9,.7,1.4); snout.position.set(0,215,55); G.add(snout);
-  const nose=new THREE.Mesh(new THREE.SphereGeometry(8,6,6),M(0xcc7788,.5));
-  nose.position.set(0,220,72); G.add(nose);
+  // Feet (rat-like, longer)
   [-1,1].forEach(s=>{
-    const ear=new THREE.Mesh(new THREE.SphereGeometry(30,10,8,0,Math.PI*2,0,Math.PI*.55),fur);
-    ear.rotation.z=s*.28; ear.position.set(s*42,265,-8); G.add(ear);
-    const iEar=new THREE.Mesh(new THREE.SphereGeometry(18,8,6,0,Math.PI*2,0,Math.PI*.5),M(0xcc8888,.7));
-    iEar.rotation.z=s*.28; iEar.position.set(s*42,265,-3); G.add(iEar);
+    const ft=new THREE.Mesh(new THREE.SphereGeometry(18,10,8),furDk);
+    ft.scale.set(1.2,.4,2.2); ft.position.set(s*32,8,20); G.add(ft);
   });
-  const wm=M(0xccbbaa,.5);
+  // Lower robe — very wide bell shape
+  const robe=new THREE.Mesh(new THREE.CylinderGeometry(30,90,180,16),robeM);
+  robe.position.y=90; G.add(robe);
+  // Inner robe layer (darker, visible at hem)
+  const iRobe=new THREE.Mesh(new THREE.CylinderGeometry(28,92,185,16),innerRobeM);
+  iRobe.position.y=88; G.add(iRobe);
+  // Torso
+  const torso=new THREE.Mesh(new THREE.CylinderGeometry(38,45,130,14),robeM);
+  torso.position.y=210; G.add(torso);
+  // Sash belt
+  const sash=new THREE.Mesh(new THREE.CylinderGeometry(46,46,20,16),sashM);
+  sash.position.y=182; G.add(sash);
+  // Shoulder mantle
+  const shldr=new THREE.Mesh(new THREE.CylinderGeometry(55,40,40,16,1,true),robeM);
+  shldr.position.y=268; G.add(shldr);
+
+  // Arms — robed sleeves
+  const aL=new THREE.Mesh(new THREE.CylinderGeometry(22,18,100,10),robeM);
+  aL.position.set(-68,238,0); aL.rotation.z=.5; G.add(aL);
+  const aR=new THREE.Mesh(new THREE.CylinderGeometry(22,18,100,10),robeM);
+  aR.position.set(68,238,0); aR.rotation.z=-.5; G.add(aR);
+  // Fur hands
+  const hL=new THREE.Mesh(new THREE.SphereGeometry(18,10,10),fur);
+  hL.scale.set(1,.75,1.2); hL.position.set(-112,198,12); G.add(hL);
+  const hR=hL.clone(); hR.position.x=112; G.add(hR);
+
+  // Neck (fur visible above collar)
+  const neck=new THREE.Mesh(new THREE.CylinderGeometry(24,30,40,12),fur);
+  neck.position.y=288; G.add(neck);
+
+  // ── HEAD — ratlike, elongated ──
+  const head=new THREE.Mesh(new THREE.SphereGeometry(48,18,14),fur);
+  head.scale.set(.82,.98,1.22); head.position.y=332; G.add(head);
+  // Long rat snout — distinctive feature
+  const snout=new THREE.Mesh(new THREE.SphereGeometry(26,12,10),fur);
+  snout.scale.set(.75,.6,1.6); snout.position.set(0,324,55); G.add(snout);
+  const snoutTip=new THREE.Mesh(new THREE.SphereGeometry(15,10,8),furDk);
+  snoutTip.scale.set(.7,.55,1); snoutTip.position.set(0,322,72); G.add(snoutTip);
+  const nose=new THREE.Mesh(new THREE.SphereGeometry(7,8,8),M(0xdd8899,.5));
+  nose.position.set(0,326,80); G.add(nose);
+  // Mouth line
+  const mouthL=new THREE.Mesh(new THREE.CylinderGeometry(2,2,28,6),furDk);
+  mouthL.rotation.z=Math.PI/2; mouthL.position.set(0,314,70); G.add(mouthL);
+  // Large round ears — key Splinter feature
   [-1,1].forEach(s=>{
-    for(let w=0;w<3;w++){
-      const wh=new THREE.Mesh(new THREE.CylinderGeometry(1,.6,70,4),wm);
-      wh.position.set(s*25,215-w*4,50);
-      wh.rotation.set(0,s*.35*(w+1),Math.PI/2+s*.25); G.add(wh);
+    const ear=new THREE.Mesh(new THREE.SphereGeometry(34,14,10,0,Math.PI*2,0,Math.PI*.62),fur);
+    ear.rotation.z=s*.22; ear.position.set(s*44,370,-5); G.add(ear);
+    const iEar=new THREE.Mesh(new THREE.SphereGeometry(22,12,8,0,Math.PI*2,0,Math.PI*.55),M(0xdd9999,.7));
+    iEar.rotation.z=s*.22; iEar.position.set(s*44,370,0); G.add(iEar);
+  });
+  // Whiskers
+  const wm=M(0xddccbb,.45);
+  [-1,1].forEach(s=>{
+    for(let w=0;w<4;w++){
+      const wh=new THREE.Mesh(new THREE.CylinderGeometry(1.2,.5,80,4),wm);
+      wh.position.set(s*22,322-w*3,58);
+      wh.rotation.set(0,s*.3*(w+1),Math.PI/2+s*.2+(w*.05)); G.add(wh);
     }
   });
-  const beard=new THREE.Mesh(new THREE.CylinderGeometry(4,1,100,6),M(0xfafafa,.5));
-  beard.rotation.x=.35; beard.position.set(0,175,45); G.add(beard);
+  // Long white beard/mustache — iconic
+  const brd=new THREE.Mesh(new THREE.CylinderGeometry(5,1.5,120,8),M(0xfafafa,.5));
+  brd.rotation.x=.28; brd.position.set(0,284,52); G.add(brd);
+  const brd2=new THREE.Mesh(new THREE.CylinderGeometry(3,1,80,8),M(0xf0f0f0,.5));
+  brd2.rotation.x=.35; brd2.position.set(-16,272,56); G.add(brd2);
+  const brd3=brd2.clone(); brd3.position.x=16; G.add(brd3);
+  // Eyes — small, dark, wise
   [-1,1].forEach(s=>{
-    const ey=new THREE.Mesh(new THREE.SphereGeometry(13,10,10),new THREE.MeshStandardMaterial({color:0x1a0800,roughness:.1,metalness:.6}));
-    ey.position.set(s*20,225,45); G.add(ey);
-    const gl=new THREE.Mesh(new THREE.SphereGeometry(5,6,6),M(0xffffff,.1));
-    gl.position.set(s*20,230,53); G.add(gl);
+    const ey=new THREE.Mesh(new THREE.SphereGeometry(12,10,10),new THREE.MeshStandardMaterial({color:0x180800,roughness:.05,metalness:.7,emissive:0x220800,emissiveIntensity:.4}));
+    ey.position.set(s*22,338,48); G.add(ey);
+    const gl=new THREE.Mesh(new THREE.SphereGeometry(4.5,6,6),M(0xffffff,.05));
+    gl.position.set(s*22+4,341,55); G.add(gl);
   });
-  const aL=new THREE.Mesh(new THREE.CylinderGeometry(14,11,90,10),fur);
-  aL.position.set(-60,150,0); aL.rotation.z=.45; G.add(aL);
-  const aR=aL.clone(); aR.position.x=60; aR.rotation.z=-.45; G.add(aR);
-  const staff=new THREE.Mesh(new THREE.CylinderGeometry(7,7,400,10),woodM);
-  staff.position.set(90,200,0); staff.rotation.z=.08; G.add(staff);
-  const sTip=new THREE.Mesh(new THREE.CylinderGeometry(9,6,25,8),silvM);
-  sTip.position.set(78,395,0); G.add(sTip);
-  const tail=new THREE.Mesh(new THREE.CylinderGeometry(13,5,200,8),furDk);
-  tail.position.set(0,40,-65); tail.rotation.x=-.35; G.add(tail);
+
+  // ── STAFF — tall walking stick ──
+  const staff=new THREE.Mesh(new THREE.CylinderGeometry(8,8,480,10),woodM);
+  staff.position.set(105,240,0); staff.rotation.z=.06; G.add(staff);
+  const sTip=new THREE.Mesh(new THREE.CylinderGeometry(10,7,30,8),silvM);
+  sTip.position.set(80,474,0); G.add(sTip);
+  // Staff knots
+  [80,180,280,370].forEach(py=>{
+    const kn=new THREE.Mesh(new THREE.CylinderGeometry(10,10,12,8),woodM);
+    kn.position.set(106-py*.006,py,0); kn.rotation.z=.06; G.add(kn);
+  });
+
+  // ── TAIL ──
+  const tail=new THREE.Mesh(new THREE.CylinderGeometry(14,4,220,10),furDk);
+  tail.rotation.x=-.28; tail.rotation.z=.1; tail.position.set(15,45,-72); G.add(tail);
 
   G.userData={walkPhase:0,bobPhase:Math.random()*Math.PI*2,legL:null,legR:null};
   return G;
